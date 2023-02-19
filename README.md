@@ -8,6 +8,7 @@ There are a few major changes made to this version. For example usages, please r
     - `V1DDClient` changed to `from allen_v1dd.client import OPhysClient`.
     - `V1DDEMClient` changed to `from allen_v1dd.client import EMClient`.
 1. **Xarray data storage.** Instead of using numpy array for storing traces (e.g., dF/F or event traces), we are using xarrays. Check out the [xarray documentation](https://docs.xarray.dev/en/stable/) for more details. Here is what is changed:
+    - Accessing traces: `session.get_traces(plane, trace_type)` no longer return a (traces, timestamps) tuple; the traces are returned as an xarray with dimensions (roi, time) and the time dimension is indexed by the timestamps (units of seconds). 
     - ROI full traces: `trace[roi]` changed to `trace.sel(roi=roi)`.
     - ROI time-indexed traces: `trace[roi, frame_start:frame_end]` changed to `trace.sel(roi=roi, time=slice(time_start, time_end))` (where time is in seconds).
         - If you need to use frame indices, then a time index can be obtained using
