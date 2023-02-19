@@ -44,7 +44,7 @@ conda activate allen_v1dd
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
-I am specifically using Python 3.10.9 (which is encoded in this environment).
+If you are having trouble building from the `environment.yml` file, then create a new conda python environment; I am specifically using Python 3.10.9.
 
 ## Install the `allen_v1dd` package locally
 From within the parent directory, `allen_v1dd`, run
