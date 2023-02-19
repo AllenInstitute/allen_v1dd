@@ -1,0 +1,18 @@
+[project]
+name = "allen_v1dd"
+version = "1.0.0"
+authors = [
+  { name="Chase King", email="chase.king@alleninstitute.org" },
+]
+description = "V1DD analysis"
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/AllenInstitute/allen_v1dd"
+"Bug Tracker" = "https://github.com/AllenInstitute/allen_v1dd/issues"

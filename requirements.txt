@@ -1,0 +1,24 @@
+# Data/array management
+numpy
+scipy
+pandas
+xarray
+
+# Statistical tools
+statsmodels
+sklearn
+
+# Plotting
+matplotlib
+seaborn
+
+# Misc
+h5py
+tqdm
+
+# For EM
+caveclient
+standard_transform
+nglui
+pcg_skel
+meshparty
