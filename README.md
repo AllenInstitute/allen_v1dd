@@ -1,6 +1,22 @@
 # Allen Institute V1DD Datasets
 *Primary Author:* Chase King ([chase.king@alleninstitute.org](mailto:chase.king@alleninstitute.org))
 
+# Porting from old SDK
+There are a few major changes made to this version. For example usages, please refer to the notebooks in the [`example_notebooks`](example_notebooks) folder.
+
+1. **Easier imports.** Clients can be imported using `from allen_v1dd.client import OPhysClient`, for example, rather than having to rely on adding folders to the system path.
+    - `V1DDClient` changed to `from allen_v1dd.client import OPhysClient`.
+    - `V1DDEMClient` changed to `from allen_v1dd.client import EMClient`.
+1. **Xarray data storage.** Instead of using numpy array for storing traces (e.g., dF/F or event traces), we are using xarrays. Check out the [xarray documentation](https://docs.xarray.dev/en/stable/) for more details. Here is what is changed:
+    - ROI full traces: `trace[roi]` changed to `trace.sel(roi=roi)`.
+    - ROI time-indexed traces: `trace[roi, frame_start:frame_end]` changed to `trace.sel(roi=roi, time=slice(time_start, time_end))` (where time is in seconds).
+        - If you need to use frame indices, then a time index can be obtained using
+        ```
+        time_idx = trace.indexes["time"].get_loc(frame)
+        trace = traces.sel(roi=roi).isel(time=slice(time_idx, time_idx+6)) # isel for index select
+        ```
+    - Other important note: xarray methods like mean that return a scalar are often returned as `xarray.DataArray` objects. To obtain the value, either cast it in `float` or call `.item()`. This is somewhat annoying but important to be aware of.
+
 # Directory structure
 Inside the [`src`](src) directory is the source code for the `allen_v1dd` package. I currently have things structured so general-purpose data processing and analysis is in this folder, and notebooks are stored externally (e.g., mine are in [`chase/analysis`](chase/analysis), outside of the package root directory). I generally use these notebooks for experimenting or analyzing the outputs of things from the `allen_v1dd` package, and then can port new features (e.g., certain stimulus analyses) into the package.
 
