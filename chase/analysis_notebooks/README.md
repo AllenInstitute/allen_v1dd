@@ -1,0 +1,2 @@
+# Chase's analysis notebooks
+This is where all my (Chase's) analysis notebooks are stored. Note that some of them may be using the old V1DD API, and so may not be functional. Many of the newer ones (and any one past mid-Feb 2023) will be runnable using the `allen_v1dd` package. Some ones that are defunct are stored in the [`old_api`](old_api) folder but can be easily be ported to the new API.
