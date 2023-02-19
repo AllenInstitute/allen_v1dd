@@ -28,7 +28,7 @@ Metrics are saved in the [`data_frames`](data_frames) directory. The [`v1dd_metr
 For examples, see the notebooks in the [`example_notebooks`](example_notebooks) folder.
 
 # Using this library
-## Download repository
+## (1) Download repository
 First `cd` to wherever you want your local copy to be stored. Then run
 ```
 git clone git@github.com:AllenInstitute/allen_v1dd.git
@@ -36,7 +36,7 @@ cd allen_v1dd
 ```
 This will close this git repository into the `allen_v1dd` folder.
 
-## Creating conda environment
+## (2) Creating conda environment
 The environment I use is called `allen_v1dd` and is saved in `environment.yml`. To create a conda env from this file and install packages, run (from the main directory)
 ```
 conda env create -f environment.yml
@@ -46,7 +46,7 @@ pip install -r requirements.txt
 ```
 If you are having trouble building from the `environment.yml` file, then create a new conda python environment; I am specifically using Python 3.10.9.
 
-## Install the `allen_v1dd` package locally
+## (3) Install the `allen_v1dd` package locally
 From within the parent directory, `allen_v1dd`, run
 ```
 pip install -e .
