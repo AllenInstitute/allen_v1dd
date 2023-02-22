@@ -1,5 +1,6 @@
 from os import path
 from glob import glob
+from collections.abc import Iterable
 
 import numpy as np
 import h5py
@@ -438,14 +439,15 @@ class OPhysSession:
             roi (int or array of int): ROI ID
 
         Returns:
-            np.ndarray: Binary image mask of the ROI
+            np.ndarray: Binary image mask of the ROI. If given a list of ROIs, the return is the union of all individual masks.
         """
         with self.open_file() as nwb_file:
             plane_grp = nwb_file[f"{self._rois_and_traces(plane)}/ImageSegmentation"]
             width = plane_grp['img_width'][()]
             height = plane_grp['img_height'][()]
             mask = np.zeros((height, width), dtype=bool)
-            if type(roi) in (list, np.array):
+            
+            if isinstance(roi, Iterable):
                 for r in roi:
                     pixels = plane_grp[f"imaging_plane/roi_{r:04}/pix_mask"][()] # pad with leading zeros
                     mask[pixels[1, :], pixels[0, :]] = True

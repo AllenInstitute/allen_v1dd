@@ -7,7 +7,7 @@ class StimulusAnalysis(object):
     Designed to be subclassed to analyze particular stimuli.
     """
 
-    TIME_PER_FRAME = 0.17 # rounded up so time windows include frames
+    TIME_PER_FRAME = 0.165 # sec (ish)
 
     def __init__(self, stim_name: str, stim_abbrev: str, session, plane: int, trace_type: str):
         self.stim_name = stim_name
@@ -64,11 +64,29 @@ class StimulusAnalysis(object):
         else:
             baseline = traces.sel(time=slice(time+baseline_time_window[0], time+baseline_time_window[1])).mean("time")
             return response - baseline
+        
+    def get_responses_idx(self, frame: int, baseline_frame_window: tuple, response_frame_window: tuple, trace_type: str=None) -> np.ndarray:
+        traces = self.get_traces(trace_type).values # np.ndarray, dims (roi, time)
+        response = traces[:, slice(frame+response_frame_window[0], frame+response_frame_window[1])].mean(axis=1)
 
-    def get_random_spont_times(self, shape, start_padding=2, end_padding=-2):
+        if baseline_frame_window is None:
+            return response
+        else:
+            baseline = traces[:, slice(frame+baseline_frame_window[0], frame+baseline_frame_window[1])].mean(axis=1)
+            return response - baseline
+
+    def get_random_spont_times(self, shape, start_padding=0, end_padding=0, time=None):
         start, end = self.spont_stim_table.at[0, "start"], self.spont_stim_table.at[0, "end"]
-        random_times = np.random.uniform(low=start+start_padding, high=end+end_padding, size=shape)
-        return random_times
+
+        if time is None:
+            rand_method = np.random.uniform
+        else:
+            time_index = time.indexes["time"]
+            start = time_index.get_loc(start, method="nearest")
+            end = time_index.get_loc(end, method="nearest")
+            rand_method = np.random.randint
+
+        return rand_method(low=start+start_padding, high=end+end_padding, size=shape)
 
     def get_spont_null_dist_dff_traces(self, roi, frame_window, baseline_frame_window=None, n_boot=1000):
         # Used to show a baseline distribution when plotting for an individual ROI
@@ -82,11 +100,11 @@ class StimulusAnalysis(object):
         for boot_i, time in enumerate(random_times):
             time_idx = roi_dff.indexes["time"].get_loc(time, method="nearest")
             time_slice = slice(time_idx+frame_window[0], time_idx+frame_window[1])
-            trace = roi_dff.isel(time=time_slice)
+            trace = roi_dff.values[time_slice]
 
             if baseline_frame_window is not None:
                 baseline_slice = slice(time_idx+baseline_frame_window[0], time_idx+baseline_frame_window[1])
-                trace = trace - roi_dff.isel(time=baseline_slice).mean()
+                trace = trace - roi_dff.values[baseline_slice].mean()
             
             dist[boot_i, :] = trace
         
@@ -106,27 +124,45 @@ class StimulusAnalysis(object):
         Returns:
             np.ndarray: Bootstrap distribution of spontaneous responses; has shape (n_ROI, n_boot) = (traces.shape[0], n_boot).
         """
-        # I believe the timestamps are the same but just doing this for clarity sake
         cache_key = (baseline_time_window, response_time_window, n_boot, n_means, trace_type)
 
-        if cache_key in self._null_dist_cache:
+        if cache and cache_key in self._null_dist_cache:
             return self._null_dist_cache[cache_key]
 
-        random_times = self.get_random_spont_times(
-            shape=(n_boot, n_means),
-            start_padding=(-baseline_time_window[0] if baseline_time_window is not None else 0),
-            end_padding=response_time_window[1]
-        )
         dist = np.empty((self.n_rois, n_boot))
 
+        # THIS IS HORRENDOUSLY SLOW! DANG YOU XARRAY
+        # random_times = self.get_random_spont_times(
+        #     shape=(n_boot, n_means),
+        #     start_padding=(-baseline_time_window[0] if baseline_time_window is not None else 0),
+        #     end_padding=-response_time_window[1]
+        # )
+        # for boot_i in range(n_boot):
+        #     r = 0
+        #     rand_times = random_times[boot_i]
+        #     for time in rand_times:
+        #         r += self.get_responses(time=time, baseline_time_window=baseline_time_window, response_time_window=response_time_window, trace_type=trace_type)
+        #     dist[:, boot_i] = r / n_means
+
+        time = self.get_traces(trace_type).time
+        samp_freq = time.diff("time").mean().item()
+        resp_frame_win = (int(np.round(response_time_window[0] / samp_freq)), int(np.round(response_time_window[1] / samp_freq)))
+        base_frame_win = None if baseline_time_window is None else (int(np.round(baseline_time_window[0] / samp_freq)), int(np.round(baseline_time_window[1] / samp_freq)))
+        random_frames = self.get_random_spont_times(
+            shape=(n_boot, n_means),
+            start_padding=(-base_frame_win[0] if base_frame_win is not None else 0),
+            end_padding=-resp_frame_win[1],
+            time=time
+        )
+        
         for boot_i in range(n_boot):
             r = 0
-            rand_times = random_times[boot_i]
-            for time in rand_times:
-                r += self.get_responses(time=time, baseline_time_window=baseline_time_window, response_time_window=response_time_window, trace_type=trace_type)
+            for j in range(n_means):
+                r += self.get_responses_idx(random_frames[boot_i, j], base_frame_win, resp_frame_win, trace_type=trace_type)
             dist[:, boot_i] = r / n_means
-        
-        self._null_dist_cache[cache_key] = dist
+
+        if cache:
+            self._null_dist_cache[cache_key] = dist
         return dist
 
 
