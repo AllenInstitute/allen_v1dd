@@ -16,16 +16,16 @@ class LocallySparseNoise(StimulusAnalysis):
     """
     
     def __init__(self, session, plane, trace_type="dff"):
-        super(LocallySparseNoise, self).__init__("locally_sparse_noise", "lsn", session, plane, trace_type)
+        super().__init__("locally_sparse_noise", "lsn", session, plane, trace_type)
 
         if trace_type == "dff":
             self.baseline_time_window = (-1, 0) # Baseline is the 1 sec window before (note this spans 3 different stimulus frames)
-            self.response_time_window = (0, 4*self.TIME_PER_FRAME) # Response is 0.67 sec window after (note this spans the desired stimulus along with the next one)
+            self.response_time_window = (0, 4*self.time_per_frame) # Response is 0.67 sec window after (note this spans the desired stimulus along with the next one)
             # self.response_time_window = (0, 1) # Response is 0.67 sec window after (note this spans the desired stimulus along with the next one)
         else:
             self.baseline_time_window = None
-            # self.response_time_window = (0, 2*self.TIME_PER_FRAME) # 0.33 sec stimulus duration
-            self.response_time_window = (0, 4*self.TIME_PER_FRAME) # Span to the next stimulus
+            # self.response_time_window = (0, 2*self.time_per_frame) # 0.33 sec stimulus duration
+            self.response_time_window = (0, 4*self.time_per_frame) # Span to the next stimulus
 
         self.pixel_on = 255
         self.pixel_off = 0
