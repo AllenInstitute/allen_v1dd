@@ -477,14 +477,17 @@ class DriftingGratings(StimulusAnalysis):
             if dg_full is None or dg_windowed is None:
                 raise ValueError(f"if dg_other is given it must be different dg_type from self (both are DG-{self.dg_type})")
 
-        def plot_dir_tuning(dg, ax, color="black"):
-            for sf_idx in range(len(dg.sf_list)):
-                resp_matrix = dg.trial_responses.sel(roi=roi).isel(spatial_frequency=sf_idx)
-                y = resp_matrix.mean("trial", skipna=True)
-                num_trials = resp_matrix.count("trial")
-                y_err = resp_matrix.std("trial", skipna=True) / np.sqrt(num_trials) # SEM error
-                label = f"{dg.dg_type.capitalize()} (at {dg.sf_list[sf_idx]:.2f} cpd)"
-                ax.errorbar(dg.dir_list, y, y_err, marker="o", label=label)
+        def plot_dir_tuning(dgs, ax, color="black"):
+            sf_colors = ["r", "b"]
+
+            for sf_idx in range(len(self.sf_list)):
+                for dg in dgs:
+                    resp_matrix = dg.trial_responses.sel(roi=roi).isel(spatial_frequency=sf_idx)
+                    y = resp_matrix.mean("trial", skipna=True)
+                    num_trials = resp_matrix.count("trial")
+                    y_err = resp_matrix.std("trial", skipna=True) / np.sqrt(num_trials) # SEM error
+                    label = f"{dg.dg_type.capitalize()} (at {dg.sf_list[sf_idx]:.2f} cpd)"
+                    ax.errorbar(dg.dir_list, y, y_err, marker="o", label=label, color=sf_colors[sf_idx], linewidth=(4 if dg.dg_type == "full" else 1))
 
             # pref_sf_idx = dg.metrics.at[roi, "pref_sf_idx"]
             # if plot_all_sf:
@@ -552,12 +555,10 @@ class DriftingGratings(StimulusAnalysis):
         ax_heatmap.set_xlabel("Spatial frequency (cpd)", fontsize=12)
         ax_heatmap.set_ylabel("Direction (°)", fontsize=12)
 
-        # Plot direction responses (at pref SF)
         if dg_other is None:
-            plot_dir_tuning(self, ax_dir, color="black")
+            plot_dir_tuning([self], ax_dir)
         else:
-            plot_dir_tuning(dg_full, ax_dir, color="blue")
-            plot_dir_tuning(dg_windowed, ax_dir, color="red")
+            plot_dir_tuning([dg_windowed, dg_full], ax_dir)
 
         ax_dir.axhline(y=np.quantile(self.null_dist_multi_trial[roi], 0.95), label="Baseline 95%", color="black", linestyle="dashed")
 
@@ -565,7 +566,7 @@ class DriftingGratings(StimulusAnalysis):
         ax_dir.tick_params(axis="both", labelsize=12)
         ax_dir.set_xlabel(f"Direction (°)", fontsize=12)
         ax_dir.set_ylabel(f"Mean response ({self.trace_type})", fontsize=12)
-        ax_dir.legend(fontsize=12)        
+        ax_dir.legend(fontsize=10)        
 
 
         title = f"DG tuning curves for ROI {roi} in plane {self.plane} of session {self.session.get_session_id()}"

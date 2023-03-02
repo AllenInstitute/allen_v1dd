@@ -10,7 +10,7 @@ from pcg_skel import coord_space_meshwork
 from meshparty.meshwork.meshwork import Meshwork
 
 
-CAVE_DATASTACK_NAME = "v1dd"
+V1DD_DATASTACK_NAME = "v1dd"
 CAVE_SERVER_ADDRESS = "https://globalv1.em.brain.allentech.org"
 
 # LAYER_BOUNDARIES = [200, 375, 500, 680, 850]
@@ -21,7 +21,7 @@ DEFAULT_VOXEL_RESOLUTION = [1, 1, 1]
 
 
 def cave_client_setup(make_new=False, token=None):
-    cave_client = CAVEclient(datastack_name=CAVE_DATASTACK_NAME, server_address=CAVE_SERVER_ADDRESS)
+    cave_client = CAVEclient(datastack_name=V1DD_DATASTACK_NAME, server_address=CAVE_SERVER_ADDRESS)
 
     if token is None:
         if make_new:
@@ -32,22 +32,37 @@ def cave_client_setup(make_new=False, token=None):
         print("Set auth token:", token)
 
 class EMClient:
-    def __init__(self):
-        self.cave_client = CAVEclient(datastack_name=CAVE_DATASTACK_NAME, server_address=CAVE_SERVER_ADDRESS)
+    def __init__(self,
+                 datastack_name=V1DD_DATASTACK_NAME, server_address=CAVE_SERVER_ADDRESS,
+                 nucleus_table="nucleus_detection_v0",
+                 cell_type_table="manual_central_types",
+                 dendrite_proofreading_table="ariadne_dendrite_task",
+                 axon_proofreading_table="ariadne_axon_task",
+                 neural_cell_types=None, # defaults to union(exc_cell_types, inh_cell_types)
+                 exc_cell_types=["PYC"],
+                 inh_cell_types = ["MC", "BC", "BPC", "NGC"],
+                 layer_separations=[-np.inf, 100, 270, 400, 550, 750],
+                 layer_names=["1", "2/3", "4", "5", "6"],
+                 transform_nm_to_microns=v1dd_transform_nm,
+                 ):
+        self.cave_client = CAVEclient(datastack_name=datastack_name, server_address=server_address, desired_resolution=DEFAULT_VOXEL_RESOLUTION)
         self.cave_client_seg_cv = self.cave_client.info.segmentation_cloudvolume(progress=True, parallel=1)
-        self._transform_nm_to_microns = v1dd_transform_nm() # Transform from nm to oriented microns
+        self._transform_nm_to_microns = transform_nm_to_microns() # Transform from nm to oriented microns
         self._neuron_meshwork_cache = {} # root_id -> meshparty.meshwork.meshwork.Meshwork
         
         self.voxel_resolution_attr = "dataframe_resolution"
         self.nucleus_table = "nucleus_detection_v0"
-        self.dendrite_proofreading_table = "ariadne_dendrite_task"
-        self.axon_proofreading_table = "ariadne_axon_task"
+        self.cell_type_table = cell_type_table
+        self.dendrite_proofreading_table = dendrite_proofreading_table
+        self.axon_proofreading_table = axon_proofreading_table
         self.proofreading_status_none = "not_started"
         self.proofreading_status_complete = ["clean", "complete", "submitted"]
-        self.neural_cell_types = ["PYC", "MC", "BC", "BPC", "NGC"]
+        self.neural_cell_types = exc_cell_types + inh_cell_types if neural_cell_types is None else neural_cell_types
+        self.exc_cell_types = exc_cell_types
+        self.inh_cell_types = inh_cell_types
 
-        self.layer_separations = [-np.inf, 100, 270, 400, 550, 750]
-        self.layer_names = ["1", "2/3", "4", "5", "6"]
+        self.layer_separations = layer_separations
+        self.layer_names = layer_names
         self.layer_boundaries = {
             layer: (self.layer_separations[i], self.layer_separations[i+1])
             for i, layer in enumerate(self.layer_names)
@@ -61,15 +76,30 @@ class EMClient:
         self.get_table_metadata = self.cave_client.materialize.get_table_metadata
         self.synapse_table = self.cave_client.materialize.synapse_table
 
+    @staticmethod
+    def init_microns():
+        from standard_transform import minnie_transform_nm
+        return EMClient(
+            datastack_name="minnie65_public_v343",
+            server_address=None,
+            nucleus_table="aibs_soma_nuc_metamodel_preds_v117",
+            cell_type_table="aibs_soma_nuc_metamodel_preds_v117",
+            dendrite_proofreading_table=None,
+            axon_proofreading_table=None,
+            exc_cell_types=["23P", "4P", "5P-ET", "5P-IT", "5P-NP", "6P-IT", "6P-CT"],
+            inh_cell_types=["BC", "BPC", "MC", "NGC"],
+            layer_separations=[-np.inf, 90, 260, 380, 550, 700],
+            transform_nm_to_microns=minnie_transform_nm
+        )
+
 
     def get_voxel_res(self, df: pd.DataFrame):
-        if self.voxel_resolution_attr in df.attrs:
-            res = df.attrs[self.voxel_resolution_attr]
-            if res == "mixed_resolutions":
-                return DEFAULT_VOXEL_RESOLUTION
-            else:
-                return res
-        
+        # if self.voxel_resolution_attr in df.attrs:
+        #     res = df.attrs[self.voxel_resolution_attr]
+        #     if res == "mixed_resolutions":
+        #         return DEFAULT_VOXEL_RESOLUTION
+        #     else:
+        #         return res
         return DEFAULT_VOXEL_RESOLUTION
 
 
@@ -83,8 +113,13 @@ class EMClient:
             # Assume position is already in nm
             pass
         
-        transformed_position = self._transform_nm_to_microns.apply(position) # nm -> transformed microns
-        transformed_position = transformed_position.reshape(position.shape) # Maintain original shape
+
+        if type(position) is pd.Series:
+            transformed_position = pd.Series(index=position.index, data=list(self._transform_nm_to_microns.column_apply(position, return_array=True)))
+        else:
+            transformed_position = self._transform_nm_to_microns.apply(position) # nm -> transformed microns
+            transformed_position = transformed_position.reshape(position.shape) # Maintain original shape
+
         return transformed_position
 
     
@@ -205,24 +240,32 @@ class EMClient:
         return self._get_synapses(post_ids=postsyn_pt_root_id, microns_position_mappings=microns_position_mappings, **kwargs)
 
 
-    def _include_proofreading_inplace(self, table, flag, table_pt_root_id_key="pt_root_id", axon_proof_key="axon_proofreading", dendrite_proof_key="dendrite_proofreading"):
+    def _include_proofreading_inplace(self, table, flag, table_pt_root_id_key="pt_root_id", axon_proof_key="axon_proof", dendrite_proof_key="dendrite_proof"):
         def include_proof(proof, key):
+            if proof is None: return False # failure
             proof_status = pd.Series(index=proof.pt_root_id.values, data=proof.cell_type.values) # Map from pt_root_id --> proofreading status
             table[f"{key}_status"] = table[table_pt_root_id_key].apply(lambda root_id: proof_status.get(root_id, self.proofreading_status_none))
             table[f"{key}_complete"] = table[f"{key}_status"].isin(self.proofreading_status_complete)
+            return True
         
         root_ids = table[table_pt_root_id_key].values
+        axon_proof = flag in ("axon", True, "both")
+        dendrite_proof = flag in ("dendrite", True, "both")
 
-        if flag in ("axon", True, "both"):
+        if axon_proof:
             # Add column for axon proofreading status
-            include_proof(self.get_axon_proofreading_table(root_ids=root_ids), axon_proof_key)
+            axon_proof = include_proof(self.get_axon_proofreading_table(root_ids=root_ids), axon_proof_key)
         
-        if flag in ("dendrite", True, "both"):
+        if dendrite_proof:
             # Add column for dendrite proofreading status
-            include_proof(self.get_dendrite_proofreading_table(root_ids=root_ids), dendrite_proof_key)
+            dendrite_proof = include_proof(self.get_dendrite_proofreading_table(root_ids=root_ids), dendrite_proof_key)
+
+        # Casey edit: if axon proofreading is complete, then dendrite proofreading is complete
+        if axon_proof and dendrite_proof:
+            table[f"{dendrite_proof_key}_complete"] = table.apply(lambda row: row[f"{axon_proof_key}_complete"] or row[f"{dendrite_proof_key}_complete"], axis=1)
 
     def get_cell_type_table(self, drop_duplicates=True, transform_position=True, transform_position_column="position_microns", include_proofreading=True):
-        cell_type_table = self.query_table("manual_central_types")
+        cell_type_table = self.query_table(self.cell_type_table)
 
         if drop_duplicates:
             cell_type_table.drop_duplicates("pt_root_id", inplace=True)
@@ -291,6 +334,9 @@ class EMClient:
 
 
     def _get_proofreading_table(self, table, root_ids=None, drop_duplicates=True, only_complete=True):
+        if table is None:
+            return None
+
         filter_in_dict = {}
         if root_ids is not None:
             filter_in_dict["pt_root_id"] = root_ids

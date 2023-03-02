@@ -21,6 +21,8 @@ class StimulusAnalysis(object):
         self.n_rois = len(self.is_roi_valid)
         self.n_rois_valid = np.count_nonzero(self.is_roi_valid)
         self._null_dist_cache = {}
+
+        self.time_per_frame = self.get_traces().time.diff("time").median().item()
     
     @property
     def spont_stim_table(self):
