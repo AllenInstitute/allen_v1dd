@@ -614,4 +614,4 @@ class OPhysSession:
             # Save in cache
             self._trace_cache[cache_key] = xr.DataArray(running_speed, name="running_speed", coords=dict(time=timestamps))
 
-        return running_speed, timestamps
+        return self._trace_cache[cache_key]
