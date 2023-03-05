@@ -595,7 +595,7 @@ class OPhysSession:
         cache_key = "running_speed" # same across all planes; just so we can cache it
 
         if cache_key in self._trace_cache:
-            return self._trace_cache[cache_key]
+            return self._trace_cache[cache_key].copy()
         else:
             # Load from NWB file
             with self.open_file() as nwb_file:
@@ -612,6 +612,6 @@ class OPhysSession:
                 running_speed[1:-1] = (total_dist[2:] - total_dist[:-2]) / (timestamps[2:] - timestamps[:-2]) # Central difference
 
             # Save in cache
-            self._trace_cache[cache_key] = xr.DataArray(running_speed, name="running_speed", coords=dict(time=timestamps))
-
-        return self._trace_cache[cache_key]
+            run_array = xr.DataArray(running_speed, name="running_speed", coords=dict(time=timestamps))
+            self._trace_cache[cache_key] = run_array
+            return run_array.copy()
