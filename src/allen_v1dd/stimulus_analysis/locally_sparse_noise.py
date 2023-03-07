@@ -152,8 +152,17 @@ class LocallySparseNoise(StimulusAnalysis):
 
     @property
     def sweep_responses(self):
+        """
+        Sweep responses is a np.ndarray of shape (n_stim_showings, n_rois) where the value at
+        position (i, j) is the jth ROI's response to the ith stimulus shown.
+        """
+
         if self._sweep_responses is None:
-            self._load_responses()
+            self._sweep_responses = np.zeros((len(self.stim_table), self.n_rois), dtype=float)
+            for i in self.stim_table.index:
+                start = self.stim_table.at[i, "start"]
+                self._sweep_responses[i] = self.get_responses(start, self.baseline_time_window, self.response_time_window, self.trace_type)
+
         return self._sweep_responses
     
     def _load_frames(self):
@@ -170,17 +179,6 @@ class LocallySparseNoise(StimulusAnalysis):
         _, nrows, ncols = all_frame_images.shape
         self._azimuths = (np.arange(ncols) - ncols//2 + 0.5) * self.grid_size
         self._altitudes = (np.arange(nrows) - nrows//2 + 0.5) * self.grid_size
-
-    def _load_responses(self):
-        # lsn_dur = np.mean(self.stim_table.end - self.stim_table.start)
-        # response_frame_window = get_frame_window_from_time_window(self.event_timestamps, (0, lsn_dur))
-        sweep_responses = np.zeros((len(self.stim_table), self.n_rois), dtype=float)
-        
-        for i in self.stim_table.index:
-            start = self.stim_table.at[i, "start"]
-            sweep_responses[i] = self.get_responses(start, self.baseline_time_window, self.response_time_window, self.trace_type)
-
-        self._sweep_responses = sweep_responses
 
     def get_stim_indices_from_frames(self, frames: list):
         return self.stim_table.index[self.stim_table["frame"].isin(frames)]
