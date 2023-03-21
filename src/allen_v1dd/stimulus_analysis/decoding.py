@@ -78,7 +78,7 @@ def decode_labels(X,Y,train_index,test_index,classifier='LDA',clabels=None,X_tes
     if classifier == 'LDA':
         clf = LinearDiscriminantAnalysis(solver='lsqr',shrinkage='auto')
     elif classifier == 'SVM':
-        clf = svm.LinearSVC(max_iter=1E6)#,penalty='l1',dual=False)
+        clf = svm.LinearSVC(max_iter=1E6,penalty='l1',dual=False)
     elif classifier == 'NLSVM':
         clf = svm.NuSVC(gamma="auto")
     elif classifier == 'QDA':
