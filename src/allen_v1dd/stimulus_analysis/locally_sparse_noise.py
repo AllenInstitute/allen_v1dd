@@ -79,7 +79,7 @@ class LocallySparseNoise(StimulusAnalysis):
                 azi, alt = np.unravel_index(rf.argmax(), rf.shape) # note the ordering
                 alt, azi = self.point_to_alt_azi(alt_ctr=alt+0.5, azi_ctr=azi+0.5) # Add 0.5 to center in pixel
                 rf_centers_argmax[roi, onoff, :] = (azi, alt)
-        dataset = group.create_dataset("rf_centers_argmax", data=self.rf_centers_argmax)
+        dataset = group.create_dataset("rf_centers_argmax", data=rf_centers_argmax)
         dataset.attrs["dimensions"] = ["roi", "on (0) and off (1)", "altitude (0) and azimuth (1) (deg)"]
 
         # ROI image mask centroids
