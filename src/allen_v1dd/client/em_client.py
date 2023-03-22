@@ -323,7 +323,10 @@ class EMClient:
 
     def get_coregistration_table(self, drop_duplicates=True, include_proofreading=True):
         coreg_table = self.query_table("manual_pilot_functional_coregistration_v1")
-        coreg_table["roi"] = coreg_table.apply(lambda row: f"M409828_{row.session}{row.scan_idx}_{row.field+1}_{row.unit_id}", axis=1)
+        coreg_table["ophys_session_id"] = coreg_table.apply(lambda row: f"M409828_{row.session}{row.scan_idx}", axis=1)
+        coreg_table["ophys_plane"] = coreg_table.field + 1
+        coreg_table["ophys_roi"] = coreg_table.unit_id
+        coreg_table["roi"] = coreg_table.apply(lambda row: f"{row.ophys_session_id}_{row.ophys_plane}_{row.ophys_roi}", axis=1)
         
         self.df_position_to_microns(coreg_table, "pt_position", "position_microns")
         

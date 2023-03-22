@@ -2,6 +2,10 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from datetime import datetime
+
+from allen_v1dd.client import OPhysSession
+
 class StimulusAnalysis(object):
     """Generic class used for analyzing neural responses to stimuli.
     Designed to be subclassed to analyze particular stimuli.
@@ -9,7 +13,7 @@ class StimulusAnalysis(object):
 
     TIME_PER_FRAME = 0.165 # sec (ish)
 
-    def __init__(self, stim_name: str, stim_abbrev: str, session, plane: int, trace_type: str):
+    def __init__(self, stim_name: str, stim_abbrev: str, session: OPhysSession, plane: int, trace_type: str):
         self.stim_name = stim_name
         self.stim_abbrev = stim_abbrev
         self.session = session
@@ -24,6 +28,18 @@ class StimulusAnalysis(object):
 
         self.time_per_frame = self.get_traces().time.diff("time").median().item()
     
+    def save_to_h5(self, group):
+        group.attrs["session_id"] = self.session.session_id
+        group.attrs["column"] = self.session.column_id
+        group.attrs["volume"] = self.session.volume_id
+        group.attrs["plane"] = self.plane
+        group.attrs["date_created"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        group.attrs["authors"] = "Chase King"
+        group.attrs["n_rois"] = self.n_rois
+        group.attrs["n_rois_valid"] = self.n_rois_valid
+
+        # This methos is to be overridden and called in subclasses
+
     @property
     def spont_stim_table(self):
         return self.session.get_stimulus_table("spontaneous")[0]

@@ -31,12 +31,64 @@ class LocallySparseNoise(StimulusAnalysis):
         self.pixel_off = 0
         self.pixel_gray = 127
 
-        self.n_shuffles = 1000
+        self.n_shuffles = 10000
+        self.frac_sig_trials_thresh = 0.25
 
         self._frame_images = None
         self._sweep_responses = None
         self._design_matrix = None
         self._trial_template = None
+        self._receptive_fields = None
+        self._rf_centers = None
+        self._imshow_extent = None
+
+    def save_to_h5(self, group):
+        super().save_to_h5(group)
+
+        group.attrs["trace_type"] = self.trace_type
+        group.attrs["frac_sig_trials_thresh"] = self.frac_sig_trials_thresh
+        group.attrs["image_shape"] = self.image_shape
+        group.attrs["altitudes"] = self.altitudes
+        group.attrs["azimuths"] = self.azimuths
+        group.attrs["grid_size"] = self.grid_size
+
+        # Is responsive
+        is_responsive = np.zeros((self.n_rois, 3), dtype=bool)
+        for roi in range(self.n_rois):
+            if self.is_roi_valid[roi]:
+                resp_on = self.has_receptive_field(roi, rf_type="on")
+                resp_off = self.has_receptive_field(roi, rf_type="off")
+                is_responsive[roi, :] = [resp_on, resp_off, resp_on or resp_off]
+        dataset = group.create_dataset("is_responsive", data=is_responsive)
+        dataset.attrs["columns"] = ["has_rf_on", "has_rf_off", "has_rf_on_or_off"]
+
+        # Receptive fields
+        dataset = group.create_dataset("receptive_fields", data=self.receptive_fields)
+        dataset.attrs["dimensions"] = ["roi", "on_off", "row", "column"]
+        
+        # RF centers
+        dataset = group.create_dataset("rf_centers", data=self.rf_centers)
+        dataset.attrs["dimensions"] = ["roi", "on (0) and off (1)", "altitude (0) and azimuth (1) (deg)"]
+
+        # RF centers (computed by argmax)
+        rf_centers_argmax = np.full((self.n_rois, 2, 2), np.nan)
+        rois, onoffs, alts, azis = np.where(self.receptive_fields)
+        for roi in np.unique(rois):
+            for onoff in np.unique(onoffs[rois == roi]):
+                rf = self.receptive_fields[roi, onoff]
+                azi, alt = np.unravel_index(rf.argmax(), rf.shape) # note the ordering
+                alt, azi = self.point_to_alt_azi(alt_ctr=alt+0.5, azi_ctr=azi+0.5) # Add 0.5 to center in pixel
+                rf_centers_argmax[roi, onoff, :] = (azi, alt)
+        dataset = group.create_dataset("rf_centers_argmax", data=self.rf_centers_argmax)
+        dataset.attrs["dimensions"] = ["roi", "on (0) and off (1)", "altitude (0) and azimuth (1) (deg)"]
+
+        # ROI image mask centroids
+        roi_centroids = np.full((self.n_rois, 2), np.nan, dtype=float)
+        for roi in range(self.n_rois):
+            if self.is_roi_valid[roi]:
+                roi_centroids[roi, :] = np.mean(np.where(self.session.get_roi_image_mask(self.plane, roi)), axis=1)
+        dataset = group.create_dataset("roi_centroids", data=roi_centroids)
+        dataset.attrs["columns"] = ["centroid_row", "centroid_column"]
 
     @property
     def duration(self):
@@ -63,6 +115,12 @@ class LocallySparseNoise(StimulusAnalysis):
         if self._altitudes is None:
             self._load_frames()
         return self._altitudes
+
+    @property
+    def imshow_extent(self):
+        if self._imshow_extent is None:
+            self._imshow_extent = [self.azimuths[0], self.azimuths[-1], self.altitudes[0], self.altitudes[-1]]
+        return self._imshow_extent
 
     @property
     def trial_template(self):
@@ -103,7 +161,7 @@ class LocallySparseNoise(StimulusAnalysis):
             self._design_matrix = self._design_matrix.T # shape (2*n_pixels, n_sweeps)
 
         return self._design_matrix
-    
+
     # def convolve(self, img, sigma=4):
     #     """
     #     2D Gaussian convolution.
@@ -165,6 +223,65 @@ class LocallySparseNoise(StimulusAnalysis):
 
         return self._sweep_responses
     
+    @property
+    def receptive_fields(self):
+        """
+        Array of shape (n_rois, 2, n_image_rows, n_image_columns) where each entry is the fraction of significant responses
+        at each pixel. Dimension 1 corresponds to ON (0) and OFF (1). Values less than self.frac_sig_trials are set to zero.
+        """
+        if self._receptive_fields is None:
+            design_matrix_int = self.design_matrix.astype(int) # shape (2*n_pixels, n_sweeps)
+            n_pixel_trials = self.design_matrix.sum(axis=1) # shape (2*n_pixels,)
+            roi_boot_95 = np.quantile(self.get_spont_null_dist(self.baseline_time_window, self.response_time_window, n_boot=self.n_shuffles, trace_type=self.trace_type, cache=False), 0.95, axis=1) # shape (n_rois,)
+            sig_sweep_responses = self.sweep_responses > roi_boot_95 # shape (n_sweeps, n_rois)
+            frac_sig_pixel_responses = design_matrix_int.dot(sig_sweep_responses).T / n_pixel_trials # shape (n_rois, 2*n_pixels)
+            frac_sig_pixel_responses[frac_sig_pixel_responses < self.frac_sig_trials_thresh] = 0 # Zero out pixels below significance threshold
+            frac_sig_pixel_responses[~self.is_roi_valid] = 0 # Zero out invalid ROIs
+            self._receptive_fields = frac_sig_pixel_responses.reshape(self.n_rois, 2, *self.image_shape)
+
+        return self._receptive_fields
+    
+    @property
+    def rf_centers(self):
+        """
+        Array of shape (n_rois, 2, 2). Dimension 1 corresponds to ON (0) and OFF (1). Dimension 2 corresponds to
+        azimuth (0) and altitude (1). Values of np.nan mean the ROI does not have a given RF.
+        """
+        if self._rf_centers is None:
+            self._rf_centers = np.full((self.n_rois, 2, 2), np.nan)
+
+            # Only iterate over ROIs with an RF
+            rois, onoffs, alts, azis = np.where(self.receptive_fields)
+            
+            for roi in np.unique(rois):
+                roi_mask = rois == roi
+                for onoff in np.unique(onoffs[roi_mask]):
+                    mask = roi_mask & (onoffs == onoff)
+                    alt, azi = self.point_to_alt_azi(alt_ctr=np.mean(alts[mask]) + 0.5, azi_ctr=np.mean(azis[mask]) + 0.5) # Add 0.5 to center in pixel
+                    self._rf_centers[roi, onoff, :] = (azi, alt)
+
+        return self._rf_centers
+
+    def has_receptive_field(self, roi, rf_type=None):
+        if rf_type is None:
+            rf = self.receptive_fields[roi]
+        else:
+            rf = self.receptive_fields[roi, self._rf_type_idx(rf_type)]
+        return bool(rf.max() >= self.frac_sig_trials_thresh) # otherwise it is a numpy type
+
+
+    def _rf_type_idx(self, rf_type):
+        if type(rf_type) is int:
+            return rf_type
+        
+        if rf_type == "on":
+            return 0
+        elif rf_type == "off":
+            return 1
+        else:
+            raise ValueError(f"Bad rf_type: {rf_type}")
+            
+
     def _load_frames(self):
         lsn_frames_file = path.join(self.session.v1dd_client.database_path, "stim_movies", "lsn_9deg_28degExclusion_jun_256.npy")
         all_frame_images = np.load(lsn_frames_file)
@@ -183,15 +300,24 @@ class LocallySparseNoise(StimulusAnalysis):
     def get_stim_indices_from_frames(self, frames: list):
         return self.stim_table.index[self.stim_table["frame"].isin(frames)]
     
-    def plot_rf(self, rf, is_on, desc=None, ax=None):
+    def point_to_alt_azi(self, alt_ctr, azi_ctr):
+        # Assumes lsn.altitudes and lsn.azimuths are equally-spaced (which is true in our case; 9.3 deg spacing)
+        alt = alt_ctr * (self.altitudes[-1] - self.altitudes[0]) / len(self.altitudes) + self.altitudes[0]
+        azi = azi_ctr * (self.azimuths[-1] - self.azimuths[0]) / len(self.azimuths) + self.azimuths[0]
+        return alt, azi
+
+    def plot_rf(self, rf, rf_type, desc=None, ax=None):
         if ax is None:
             fig, ax = plt.subplots()
         
-        ax.imshow(rf, cmap=("Reds" if is_on else "Blues"), interpolation="none", origin="lower")
-        ax.set_xticks(ticks=[x for x in range(len(self.azimuths))], labels=[f"{azi:.0f}" for azi in self.azimuths])
-        ax.set_yticks(ticks=[y for y in range(len(self.altitudes))], labels=[f"{alt:.0f}" for alt in self.altitudes])
+        is_on = self._rf_type_idx(rf_type) == 0
+        ax.imshow(rf, cmap=("Reds" if is_on else "Blues"), interpolation="none", origin="lower", vmin=0, vmax=0.5, extent=self.imshow_extent)
+        # ax.set_xticks(ticks=self.azimuths, labels=[f"{azi:.0f}" for azi in self.azimuths])
+        # ax.set_yticks(ticks=self.altitudes, labels=[f"{alt:.0f}" for alt in self.altitudes])
         ax.set_xlabel("Azimuth (°)", fontsize=12)
         ax.set_ylabel("Altitude (°)", fontsize=12)
         ax.set_title(f"{'ON' if is_on else 'OFF'} receptive field{'' if desc is None else f' ({desc})'}", color=("red" if is_on else "blue"))
+        ax.axvline(x=0, color="lightgray", linewidth=0.5, zorder=0)
+        ax.axhline(y=0, color="lightgray", linewidth=0.5, zorder=0)
         return ax
     
