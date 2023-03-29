@@ -48,13 +48,13 @@ def correlation_FC(X, pba=None, transform='fisher'):
     return correlation_mat
 
 ##===== Calculate correlation & shuffle distribution ======##
-def calculate_correlation(data_array, running_mask, shf_method, pba_tuple = None, subtract_mean = False, nShuffles = 100,shuffle = True):
+def calculate_correlation(data_array, running_mask, shf_method, pba_tuple = None, nShuffles = 100,shuffle = True):
     N, T = data_array.shape
 
     FC = np.zeros((2,N,N))*np.nan
     if shuffle:
-        pval = np.zeros((2,N,N))
-        FC_shf = np.zeros((2,nShuffles,N,N))
+        pval = np.zeros((2,N,N))*np.nan
+        FC_shf = np.zeros((2,nShuffles,N,N))*np.nan
     else:
         pval = []
         FC_shf = []
@@ -70,13 +70,10 @@ def calculate_correlation(data_array, running_mask, shf_method, pba_tuple = None
 
         frac = np.sum(running_mask == iR)/running_mask.shape[0]
         if frac < 0.15:
-            print(f'Not enough {rstr} timepoints to calculate correlation')
+            # print(f'Not enough {rstr} timepoints to calculate correlation')
             continue
 
         X = data_array[:,indy]
-
-        if subtract_mean:
-            X = X - np.mean(X,axis=0).reshape(1,-1)
 
         tasks_pre_launch.append(correlation_FC.remote(X,pba)) 
         # FC[iR] = ray.get(correlation_FC.remote(X,pba))
@@ -99,7 +96,8 @@ def calculate_correlation(data_array, running_mask, shf_method, pba_tuple = None
                     tasks_pre_launch.append(correlation_FC.remote(surrogates[:,iShf],pba)) 
 
     #Print progress bar
-    prog_bar.print_until_done()
+    if pba_tuple is not None:
+        prog_bar.print_until_done()
     FC_list = ray.get(tasks_pre_launch)
 
     #Extract parallel results
