@@ -1,3 +1,6 @@
+# Data frames
+data_frames/*.h5
+
 # Mac
 .DS_Store
 

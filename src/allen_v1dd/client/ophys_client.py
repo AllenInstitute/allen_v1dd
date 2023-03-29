@@ -39,6 +39,7 @@ class OPhysClient:
 
         self.database_path = database_path
         self._nwb_files = None
+        self._session_cache = {}
 
     def get_session_id(self, nwb_file) -> str:
         """Get the corresponding session id from a file
@@ -74,7 +75,7 @@ class OPhysClient:
         session_ids.sort()
         return session_ids
 
-    def load_ophys_session(self, session_id: str=None, mouse: int=None, column: int=None, volume: any=None, log=None) -> OPhysSession:
+    def load_ophys_session(self, session_id: str=None, mouse: int=None, column: int=None, volume: any=None, log=None, cache: bool=False) -> OPhysSession:
         """Load ophys session data
 
         Args:
@@ -83,12 +84,16 @@ class OPhysClient:
             column (int): Imaging column ID
             volume (any): Volume ID
             log (any): Output for session loading logs. Defaults to None (i.e., no logs).
+            cache (bool): Whether or not to cache the loaded session. Defaults to False.
 
         Returns:
             OPhysSession: Loaded ophys session data, or None if no data with the matching parameters was found.
         """
         if session_id is None:
             session_id = f"M{mouse}_{column}{volume}"
+
+        if cache and session_id in self._session_cache:
+            return self._session_cache[session_id]
 
         if log is not None: log(f"Loading session {session_id}")
         if self._nwb_files is None:
@@ -100,6 +105,10 @@ class OPhysClient:
                 if log is not None: log(f"Found matching file {file_path}")
                 ophys_session = OPhysSession(self, session_id, file_path)
                 if log is not None: log(f"Session loaded")
+
+                if cache:
+                    self._session_cache[session_id] = ophys_session
+
                 return ophys_session
 
         return None

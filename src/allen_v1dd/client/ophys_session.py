@@ -1,5 +1,6 @@
 from os import path
 from glob import glob
+from collections.abc import Iterable
 
 import numpy as np
 import h5py
@@ -454,14 +455,15 @@ class OPhysSession:
             roi (int or array of int): ROI ID
 
         Returns:
-            np.ndarray: Binary image mask of the ROI
+            np.ndarray: Binary image mask of the ROI. If given a list of ROIs, the return is the union of all individual masks.
         """
         with self.open_file() as nwb_file:
             plane_grp = nwb_file[f"{self._rois_and_traces(plane)}/ImageSegmentation"]
             width = plane_grp['img_width'][()]
             height = plane_grp['img_height'][()]
             mask = np.zeros((height, width), dtype=bool)
-            if type(roi) in (list, np.array, np.ndarray):
+            
+            if isinstance(roi, Iterable):
                 for r in roi:
                     pixels = plane_grp[f"imaging_plane/roi_{r:04}/pix_mask"][()] # pad with leading zeros
                     mask[pixels[1, :], pixels[0, :]] = True
@@ -652,7 +654,7 @@ class OPhysSession:
         cache_key = "running_speed" # same across all planes; just so we can cache it
 
         if cache_key in self._trace_cache:
-            return self._trace_cache[cache_key]
+            return self._trace_cache[cache_key].copy()
         else:
             # Load from NWB file
             with self.open_file() as nwb_file:
@@ -669,6 +671,6 @@ class OPhysSession:
                 running_speed[1:-1] = (total_dist[2:] - total_dist[:-2]) / (timestamps[2:] - timestamps[:-2]) # Central difference
 
             # Save in cache
-            self._trace_cache[cache_key] = xr.DataArray(running_speed, name="running_speed", coords=dict(time=timestamps))
-
-        return xr.DataArray(running_speed, name="running_speed", coords=dict(time=timestamps))
+            run_array = xr.DataArray(running_speed, name="running_speed", coords=dict(time=timestamps))
+            self._trace_cache[cache_key] = run_array
+            return run_array.copy()

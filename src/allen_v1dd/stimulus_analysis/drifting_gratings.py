@@ -13,13 +13,14 @@ class DriftingGratings(StimulusAnalysis):
     """Used to analyze the drifting gratings stimulus.
     """
 
-    def __init__(self, session, plane, trace_type: str="events", dg_type: str="full"):
+    def __init__(self, session, plane, trace_type: str="events", dg_type: str="full", quick_load=False):
         if dg_type not in ("windowed", "full"):
             raise ValueError(f"dg_type must be either 'windowed' or 'full'; given '{dg_type}'")
         if trace_type not in ("dff", "events"):
             raise ValueError(f"{trace_type} must be either 'dff' or 'events'; given '{trace_type}'")
 
-        super(DriftingGratings, self).__init__(f"drifting_gratings_{dg_type}", f"dg{dg_type[0]}", session, plane, trace_type)
+        # super(DriftingGratings, self).__init__(f"drifting_gratings_{dg_type}", f"dg{dg_type[0]}", session, plane, trace_type)
+        super().__init__(f"drifting_gratings_{dg_type}", f"dg{dg_type[0]}", session, plane, trace_type)
 
         self.dg_type = dg_type
         self.tf_list = np.array(sorted(self.stim_table["temporal_frequency"].dropna().unique()), dtype=int) # temporal frequency (Hz); in these data, only one TF is used (1 Hz)
@@ -33,12 +34,12 @@ class DriftingGratings(StimulusAnalysis):
         self.n_trials = self.stim_meta["n_trials"] # number of trials that each stimulus is repeated
         # ^ note: not all stimuli are repeated this many times, so treat it as an upper bound
         
+        self.quick_load = quick_load
         self.sig_p_thresh = 0.05
-        self.frac_responsive_trials_thresh = 0.25 # Fraction of responses in the preferred direction that must be significant for the ROI to be flagged as responsive
+        self.frac_responsive_trials_thresh = 0.5 # Fraction of responses in the preferred direction that must be significant for the ROI to be flagged as responsive
         self.n_null_distribution_boot = 10000
-        self.n_chisq_shuffles = 1000
-        self.n_cv_iter = 20 # Number of cross-validation iterations
-        self.fit_tuning_curve = True # Whether to fit tuning curves to ROI responses
+        self.n_chisq_shuffles = 100 if quick_load else 1000
+        self.fit_tuning_curve = not quick_load # Whether to fit tuning curves to ROI responses
         
         if trace_type == "dff":
             self.baseline_time_window = (-3, 0) # Time window used to offset/"demean" the event traces
@@ -50,7 +51,7 @@ class DriftingGratings(StimulusAnalysis):
         self._metrics = None
         self._sweep_responses = None
         self._trial_responses = None
-        self._null_trial_responses = None
+        self._blank_trial_responses = None
         self._peak_response_metrics = {}
         self._stimulus_responses = {}
         self._null_dist_multi_trial = None
@@ -65,20 +66,59 @@ class DriftingGratings(StimulusAnalysis):
     @property
     def trial_responses(self):
         if self._trial_responses is None:
-            self._load_responses()
+            self._trial_responses = xr.DataArray(
+                data=np.nan,
+                name="trial_responses",
+                dims=("roi", "direction", "spatial_frequency", "trial"), # Could include temporal frequency, but there is only 1 value (1)
+                coords=dict(
+                    roi=self.session.get_rois(self.plane),
+                    direction=self.dir_list,
+                    spatial_frequency=self.sf_list,
+                    trial=range(self.n_trials)
+                )
+            )
+
+            for dir in self.dir_list:
+                for sf in self.sf_list:
+                    stim_idx = self.get_stim_idx(dir, sf)
+                    self._trial_responses.loc[
+                        dict(direction=dir, spatial_frequency=sf, trial=range(len(stim_idx)))
+                    ] = self.sweep_responses[stim_idx, :].T # shape (n_rois, len(stim_idx))
+
         return self._trial_responses
     
     @property
     def blank_responses(self):
-        if self._null_trial_responses is None:
-            self._load_responses()
-        return self._null_trial_responses
+        if self._blank_trial_responses is None:
+            null_stim_idx = self.stim_table.index[self.stim_table.isna().any(axis=1)]
+            self._blank_trial_responses = self.sweep_responses[null_stim_idx, :].T # shape (n_rois, len(null_stim_idx))
+
+        return self._blank_trial_responses
     
     @property
     def sweep_responses(self):
         if self._sweep_responses is None:
-            self._load_responses()
+            self._sweep_responses = np.zeros((len(self.stim_table), self.n_rois), dtype=float)
+            for i in self.stim_table.index:
+                start = self.stim_table.at[i, "start"]
+                responses = self.get_responses(start, self.baseline_time_window, self.response_time_window)
+                self._sweep_responses[i] = responses
+
         return self._sweep_responses
+
+    @property
+    def null_dist_single_trial(self):
+        if self._null_dist_single_trial is None:
+            self._null_dist_single_trial = self.get_spont_null_dist(self.baseline_time_window, self.response_time_window, n_boot=self.n_null_distribution_boot, n_means=1, trace_type=self.trace_type, cache=True)
+
+        return self._null_dist_single_trial
+    
+    @property
+    def null_dist_multi_trial(self):
+        if self._null_dist_multi_trial is None:
+            self._null_dist_multi_trial = self.get_spont_null_dist(self.baseline_time_window, self.response_time_window, n_boot=self.n_null_distribution_boot, n_means=self.n_trials, trace_type=self.trace_type, cache=True)
+
+        return self._null_dist_multi_trial
 
     def get_stim_idx(self, dir, sf):
         if dir is None and sf is None:
@@ -115,120 +155,31 @@ class DriftingGratings(StimulusAnalysis):
         # Load responses for each trial
         print(f"Loading DG-{self.dg_type} response metrics for session {self.session.get_session_id()}, plane {self.plane}...")
 
-        # Matches the length of stim_table
-        sweep_responses = np.zeros((len(self.stim_table), self.n_rois), dtype=float)
-        for i in self.stim_table.index:
-            start = self.stim_table.at[i, "start"]
-            responses = self.get_responses(start, self.baseline_time_window, self.response_time_window)
-            sweep_responses[i] = responses
-        self._sweep_responses = sweep_responses
-
-        # print("Loading trial responses...")
-        trial_responses = xr.DataArray(
-            data=np.nan,
-            name="trial_responses",
-            dims=("roi", "direction", "spatial_frequency", "trial"), # Could include temporal frequency, but there is only 1 value (1)
-            coords=dict(
-                roi=self.session.get_rois(self.plane),
-                direction=self.dir_list,
-                spatial_frequency=self.sf_list,
-                trial=range(self.n_trials)
-            )
-        )
-
-        for dir in self.dir_list:
-            for sf in self.sf_list:
-                stim_idx = self.get_stim_idx(dir, sf)
-                trial_responses.loc[dict(direction=dir, spatial_frequency=sf, trial=range(len(stim_idx)))] = sweep_responses[stim_idx, :].T # shape (n_rois, len(stim_idx))
-        self._trial_responses = trial_responses
-        # print(" Done.")
-
-        null_stim_idx = self.stim_table.index[self.stim_table.isna().any(axis=1)]
-        null_trial_responses = sweep_responses[null_stim_idx, :].T # shape (n_rois, len(null_stim_idx))
-        self._null_trial_responses = null_trial_responses
-
-        # Load null dist
-        # print("Building null/baseline spontaneous distribution...")
-        null_dist_multi_trial = self.get_spont_null_dist(self.baseline_time_window, self.response_time_window, n_boot=self.n_null_distribution_boot, n_means=self.n_trials, trace_type=self.trace_type, cache=True)
-        null_multi_mean = null_dist_multi_trial.mean(axis=1)
-        null_multi_std = null_dist_multi_trial.std(axis=1)
-        self._null_dist_multi_trial = null_dist_multi_trial
+        null_multi_mean = self.null_dist_multi_trial.mean(axis=1)
+        null_multi_std = self.null_dist_multi_trial.std(axis=1)
         
-        null_dist_single_trial = self.get_spont_null_dist(self.baseline_time_window, self.response_time_window, n_boot=self.n_null_distribution_boot, n_means=1, trace_type=self.trace_type, cache=True)
-        self._null_dist_single_trial = null_dist_single_trial
-        # print("Done.")
-
         # Load metrics
         # print("Computing quantitative ROI metrics...", end="")
         # metrics = pd.DataFrame(columns=["is_responsive", "pref_dir", "pref_sf", "pref_dir_idx", "pref_sf_idx", "osi", "dsi", "cir_var", "osi_cir_var"])
         all_metrics = []
-
-        # ("cv" here refers to cross validation)
-        n_cv_trials = self.n_trials // 2
-        pref_dir_idx_cv = np.zeros(self.n_cv_iter, dtype=int)
-        pref_sf_idx_cv = np.zeros(self.n_cv_iter, dtype=int)
-        osi_cv = np.zeros(self.n_cv_iter, dtype=float)
-        dsi_cv = np.zeros(self.n_cv_iter, dtype=float)
 
         def ratio(p, q):
             return 0 if q == 0 else p/q
 
         # for roi in tqdm(range(self.n_rois), desc="Loading ROI responses"):
         for roi in range(self.n_rois):
-            roi_trial_resp = trial_responses.sel(roi=roi)
+            roi_trial_resp = self.trial_responses.sel(roi=roi)
             metrics = {}
             all_metrics.append(metrics)
 
             # Check if not valid
             if not self.is_roi_valid[roi]:
-                # metrics["is_valid"] = False
-                # metrics["is_responsive"] = False
                 continue
 
             # Check if bad ROI (i.e., it has all NaN responses)
             if np.all(np.isnan(roi_trial_resp)):
                 print(f" (Skipping bad ROI {roi} with all NaN responses)", end="")
-                # metrics["is_valid"] = False
-                # metrics["is_responsive"] = False
                 continue
-
-            # metrics["is_valid"] = True
-
-            # Use cross validation to compute the mean pref dir
-            # e.g., if all responses in pref dir are very strong, then mean pref dir will be approx. equal to the pref dir
-            #       if only a handful of responses are 
-            # for cv_i in range(self.n_cv_iter):
-            #     idx = np.random.permutation(self.n_trials)
-            #     cv_trial_train, cv_trial_test = idx[:n_cv_trials], idx[n_cv_trials:]
-
-            #     # Compute preferred stimulus condition using train
-            #     roi_mean_trial_resp = np.nanmean(roi_trial_resp[:, :, cv_trial_train], axis=2)
-            #     if np.all(np.isnan(roi_mean_trial_resp)):
-            #         print("ERROR ENCOUNTERED: All trial responses nan")
-            #         print(f"roi={roi}, cv_i={cv_i}, cv_trial_train={cv_trial_train}, cv_trial_test={cv_trial_test}")
-            #     dir, sf = np.unravel_index(np.nanargmax(roi_mean_trial_resp), roi_mean_trial_resp.shape)
-            #     pref_dir_idx_cv[cv_i] = dir
-            #     pref_sf_idx_cv[cv_i] = sf
-
-            #     # Compute metrics using test
-            #     response_test = np.nanmean(roi_trial_resp[:, :, cv_trial_test], axis=2)
-            #     null_idx = DriftingGratings.get_null_dir_index(dir)
-            #     pref_response = response_test[dir, sf]
-            #     null_response = response_test[null_idx, sf]
-            #     dsi = ratio(pref_response - null_response, pref_response + null_response)
-            #     dsi_cv[cv_i] = dsi
-            #     # orth_1_idx, orth_2_idx = DriftingGratings.get_orth_dir_indices(dir)
-            #     # orth_response = (response_test[orth_1_idx, sf] + response_test[orth_2_idx, sf]) / 2.0
-            #     # osi = 0 if pref_response == orth_response else (pref_response - orth_response) / (pref_response + orth_response)
-            #     osi = self._compute_osi(response_test[:, sf])
-            #     osi_cv[cv_i] = osi
-            
-            # Preferred direction and spatial frequency are the most common that came up during cross-validation
-            # pref_dir_idx = st.mode(pref_dir_idx_cv, keepdims=False)[0]
-            # pref_sf_idx = st.mode(pref_sf_idx_cv, keepdims=False)[0]
-            # pref_dir = self.dir_list[pref_dir_idx]
-            # pref_sf = self.sf_list[pref_sf_idx]
-            # pref_response = roi_mean_trial_resp[pref_dir_idx, pref_sf_idx]
 
             # Compute preferred stimulus by taking argmax of mean responses
             roi_mean_trial_resp = roi_trial_resp.mean("trial", skipna=True)
@@ -262,7 +213,7 @@ class DriftingGratings(StimulusAnalysis):
             metrics["z_score"] = (pref_response - null_multi_mean[roi]) / null_multi_std[roi]
 
             # If mean response is above 95% null dist
-            metrics["response_p"] = np.mean(pref_response < null_dist_multi_trial[roi])
+            metrics["response_p"] = np.mean(pref_response < self.null_dist_multi_trial[roi])
 
             # Compute OSI and DSI
             null_idx = DriftingGratings.get_null_dir_index(pref_dir_idx)
@@ -278,7 +229,7 @@ class DriftingGratings(StimulusAnalysis):
             # Determine if responsive
             pref_stim_trial_responses = roi_trial_resp.isel(direction=pref_dir_idx, spatial_frequency=pref_sf_idx) # ROI responses for preferred stimulus condition
             pref_stim_trial_responses = pref_stim_trial_responses.dropna("trial").values.reshape(-1, 1) # drop nans (no stimulus presentation) and make column vector
-            p_values = np.mean(pref_stim_trial_responses < null_dist_single_trial[roi], axis=1) # p-values of responses when compared to null distribution
+            p_values = np.mean(pref_stim_trial_responses < self.null_dist_single_trial[roi], axis=1) # p-values of responses when compared to null distribution
             # frac_sig = np.mean(np.logical_or(p_values < self.sig_p_thresh, p_values > (1-self.sig_p_thresh))) # fraction of p-values that are significant
             frac_sig = np.mean(p_values < self.sig_p_thresh) # fraction of p-values that are significant
             metrics["frac_responsive_trials"] = frac_sig
@@ -287,7 +238,7 @@ class DriftingGratings(StimulusAnalysis):
 
             # Compute lifetime sparseness
             # (See Olsen & Wilson 2008 for definition) (https://www.nature.com/articles/nature06864)
-            responses = trial_responses[roi].values.reshape(-1)
+            responses = roi_trial_resp.values.reshape(-1)
             responses = responses[~np.isnan(responses)]
             # n = len(responses)
             # lifetime_sparseness = (1 - (np.square(np.sum(responses / n)) / (np.sum(np.square(responses) / n)))) / (1 - 1/n)
@@ -296,12 +247,12 @@ class DriftingGratings(StimulusAnalysis):
 
             # Compute p-values by comparing trial responses
             groups = []
-            groups.append(null_trial_responses[roi]) # Append baseline condition
+            groups.append(self.blank_responses[roi]) # Append baseline condition
 
             # Append stimulus condition responses
-            for dir in trial_responses.direction:
-                for sf in trial_responses.spatial_frequency:
-                    groups.append(trial_responses.sel(roi=roi, direction=dir, spatial_frequency=sf).dropna("trial"))
+            for dir in self.trial_responses.direction:
+                for sf in self.trial_responses.spatial_frequency:
+                    groups.append(self.trial_responses.sel(roi=roi, direction=dir, spatial_frequency=sf).dropna("trial"))
 
             _, p = st.f_oneway(*groups, axis=0)
             metrics["p_trial_responses"] = p
@@ -333,10 +284,10 @@ class DriftingGratings(StimulusAnalysis):
 
             # Normalized responses for each direction
             norm_resp = []
-            mean_grating_response = trial_responses.sel(roi=23).mean(skipna=True).item()
-            mean_blank_response = null_trial_responses[roi].mean()
+            mean_grating_response = roi_trial_resp.mean(skipna=True).item()
+            mean_blank_response = self.blank_responses[roi].mean()
             for i in range(len(self.dir_list)):
-                resp = self.get_mean_response(roi, i, pref_sf_idx)
+                resp = roi_trial_resp.isel(direction=i, spatial_frequency=pref_sf_idx).mean(skipna=True).item()
                 norm_resp.append((resp - mean_blank_response) / (mean_grating_response + mean_blank_response))
             metrics["norm_dir_responses"] = norm_resp
 
@@ -349,13 +300,13 @@ class DriftingGratings(StimulusAnalysis):
 
 
         # Is responsive using chi-squared test
-        metrics["chisq_response_p"] = get_chisq_response_proba(self.stim_table, ["direction", "spatial_frequency"], sweep_responses, n_shuffles=self.n_chisq_shuffles)
+        metrics["chisq_response_p"] = get_chisq_response_proba(self.stim_table, ["direction", "spatial_frequency"], self.sweep_responses, n_shuffles=self.n_chisq_shuffles)
 
         # Null distribution
         metrics["null_dist_multi_mean"] = null_multi_mean
         metrics["null_dist_multi_std"] = null_multi_std
-        metrics["null_dist_single_mean"] = null_dist_single_trial.mean(axis=1)
-        metrics["null_dist_single_std"] = null_dist_single_trial.std(axis=1)
+        metrics["null_dist_single_mean"] = self.null_dist_single_trial.mean(axis=1)
+        metrics["null_dist_single_std"] = self.null_dist_single_trial.std(axis=1)
 
         metrics = metrics.convert_dtypes()
         self._metrics = metrics
@@ -515,47 +466,47 @@ class DriftingGratings(StimulusAnalysis):
         fig.suptitle("\n".join(title), fontsize=14)
         fig.tight_layout()
         fig.subplots_adjust(wspace=0.25)
-        return fig
+        # return fig
 
 
 
-    def plot_roi_tuning_curves(self, roi: int, dg_other=None, plot_all_sf=False):
+    def plot_roi_tuning_curves(self, roi: int, dg_other=None, plot_all_sf=False, figsize=(8, 4)):
         if dg_other is not None:
             dg_full = (self if self.dg_type == "full" else dg_other)
             dg_windowed = (self if self.dg_type == "windowed" else dg_other)
             if dg_full is None or dg_windowed is None:
                 raise ValueError(f"if dg_other is given it must be different dg_type from self (both are DG-{self.dg_type})")
 
-        def plot_dir_tuning(dg, ax, color="black"):
-            pref_sf_idx = dg.metrics.at[roi, "pref_sf_idx"]
-            
-            if plot_all_sf:
-                sf_idx_to_plot = list(range(len(dg.sf_list)))
-            else:
-                sf_idx_to_plot = [pref_sf_idx]
+        def plot_dir_tuning(dgs, ax, color="black"):
+            sf_colors = ["r", "b"]
 
-            for sf_idx in sf_idx_to_plot:
-                resp_matrix = dg.trial_responses[roi, :, sf_idx, :] # shape (dir, trials)
-                y = np.nanmean(resp_matrix, axis=1) # shape (dir,)
-                num_trials = np.count_nonzero(~np.isnan(resp_matrix), axis=1) # shape (dir,)
-                y_err = np.nanstd(resp_matrix, axis=1) / np.sqrt(num_trials) # SEM error
-                is_pref = sf_idx == pref_sf_idx
-                labelpref = ", pref" if is_pref else ""
-                label = f"{dg.dg_type.capitalize()} (at {dg.sf_list[sf_idx]:.2f} cpd{labelpref})"
-                linestyle = "solid" if is_pref else "dotted"
-                alpha = 1 if is_pref else 0.5
-                ax.errorbar(dg.dir_list, y, y_err if is_pref else None, linestyle=linestyle, marker="o", color=color, alpha=alpha, label=label)
+            for sf_idx in range(len(self.sf_list)):
+                for dg in dgs:
+                    resp_matrix = dg.trial_responses.sel(roi=roi).isel(spatial_frequency=sf_idx)
+                    y = resp_matrix.mean("trial", skipna=True)
+                    num_trials = resp_matrix.count("trial")
+                    y_err = resp_matrix.std("trial", skipna=True) / np.sqrt(num_trials) # SEM error
+                    label = f"{dg.dg_type.capitalize()} (at {dg.sf_list[sf_idx]:.2f} cpd)"
+                    ax.errorbar(dg.dir_list, y, y_err, marker="o", label=label, color=sf_colors[sf_idx], linewidth=(4 if dg.dg_type == "full" else 1))
 
-        def plot_sf_tuning(dg, ax, color="black"):
-            pref_dir_idx = dg.metrics.at[roi, "pref_dir_idx"]
-            pref_resp_matrix = dg.trial_responses[roi, pref_dir_idx, :, :] # shape SF x TRIALS
-            y = np.nanmean(pref_resp_matrix, axis=1) # shape SF
-            num_trials = np.count_nonzero(~np.isnan(pref_resp_matrix), axis=1) # shape SF
-            y_err = np.nanstd(pref_resp_matrix, axis=1) / np.sqrt(num_trials) # SEM error
-            label = f"{dg.dg_type.capitalize()} (at {self.dir_list[pref_dir_idx]:.0f}°)"
-            ax.errorbar(dg.sf_list, y, y_err, marker="o", color=color, label=label)
+            # pref_sf_idx = dg.metrics.at[roi, "pref_sf_idx"]
+            # if plot_all_sf:
+            #     sf_idx_to_plot = list(range(len(dg.sf_list)))
+            # else:
+            #     sf_idx_to_plot = [pref_sf_idx]
+            # for sf_idx in sf_idx_to_plot:
+            #     resp_matrix = dg.trial_responses.sel(roi).isel(spatial_frequency=sf_idx) # shape (dir, trials)
+            #     y = np.nanmean(resp_matrix, axis=1) # shape (dir,)
+            #     num_trials = np.count_nonzero(~np.isnan(resp_matrix), axis=1) # shape (dir,)
+            #     y_err = np.nanstd(resp_matrix, axis=1) / np.sqrt(num_trials) # SEM error
+            #     is_pref = sf_idx == pref_sf_idx
+            #     labelpref = ", pref" if is_pref else ""
+            #     label = f"{dg.dg_type.capitalize()} (at {dg.sf_list[sf_idx]:.2f} cpd{labelpref})"
+            #     linestyle = "solid" if is_pref else "dotted"
+            #     alpha = 1 if is_pref else 0.5
+            #     ax.errorbar(dg.dir_list, y, y_err if is_pref else None, linestyle=linestyle, marker="o", color=color, alpha=alpha, label=label)
 
-        fig, (ax_heatmap, ax_dir, ax_sf) = plt.subplots(ncols=3, figsize=(12, 5), gridspec_kw=dict(width_ratios=[1, 4, 2]))
+        fig, (ax_heatmap, ax_dir) = plt.subplots(ncols=2, figsize=figsize, gridspec_kw=dict(width_ratios=[1, 5]))
 
         # from matplotlib.patches import Rectangle
 
@@ -604,12 +555,12 @@ class DriftingGratings(StimulusAnalysis):
         ax_heatmap.set_xlabel("Spatial frequency (cpd)", fontsize=12)
         ax_heatmap.set_ylabel("Direction (°)", fontsize=12)
 
-        # Plot direction responses (at pref SF)
         if dg_other is None:
-            plot_dir_tuning(self, ax_dir, color="black")
+            plot_dir_tuning([self], ax_dir)
         else:
-            plot_dir_tuning(dg_full, ax_dir, color="blue")
-            plot_dir_tuning(dg_windowed, ax_dir, color="red")
+            plot_dir_tuning([dg_windowed, dg_full], ax_dir)
+
+        ax_dir.axhline(y=np.quantile(self.null_dist_multi_trial[roi], 0.95), label="Baseline 95%", color="black", linestyle="dashed")
 
         ax_dir.set_xticks(self.dir_list)
         ax_dir.tick_params(axis="both", labelsize=12)
@@ -618,26 +569,13 @@ class DriftingGratings(StimulusAnalysis):
         ax_dir.legend(fontsize=10)        
 
 
-        # Plot SF curve (at pref dir)
-        # (at pref. dir = {self.dir_list[pref_dir_idx]:.0f} cpd)
-        if dg_other is None:
-            plot_sf_tuning(self, ax_sf, color="black")
-        else:
-            plot_sf_tuning(dg_full, ax_sf, color="blue")
-            plot_sf_tuning(dg_windowed, ax_sf, color="red")
-
-        ax_sf.set_xlabel(f"Spatial frequency (cpd)\n", fontsize=12)
-        ax_sf.set_xticks(self.sf_list)
-        ax_sf.tick_params(axis="both", labelsize=12)
-        ax_sf.legend(fontsize=10)
-
         title = f"DG tuning curves for ROI {roi} in plane {self.plane} of session {self.session.get_session_id()}"
-        metrics_title = f"osi={self.metrics.at[roi, 'osi']:.2f}, gosi={self.metrics.at[roi, 'gosi']:.2f}, dsi={self.metrics.at[roi, 'dsi']:.2f}"
-        title = f"{title}\n{metrics_title}"
+        metrics_title = "" if self._metrics is None else f"\nosi={self.metrics.at[roi, 'osi']:.2f}, gosi={self.metrics.at[roi, 'gosi']:.2f}, dsi={self.metrics.at[roi, 'dsi']:.2f}"
+        title = f"{title}{metrics_title}"
         fig.suptitle(title, fontsize=14)
 
         fig.tight_layout()
-        return fig
+        # return fig
 
 
     def plot_trial_responses(self, roi: int, response_type="raw", ax=None):
@@ -786,7 +724,7 @@ class DriftingGratings(StimulusAnalysis):
         if pd.isna(dir_idx) or pd.isna(dir_idx):
             return (np.nan, np.nan) if return_error else np.nan
 
-        responses = self.trial_responses[roi, dir_idx, sf_idx, :].dropna("trial")
+        responses = self.trial_responses.sel(roi=roi).isel(direction=dir_idx, spatial_frequency=sf_idx).dropna("trial")
         mean = responses.mean().item()
         
         if return_error:
