@@ -26,3 +26,7 @@ standard_transform
 nglui
 pcg_skel
 meshparty
+
+# EM graph analyses
+networkx
+# graspologic
