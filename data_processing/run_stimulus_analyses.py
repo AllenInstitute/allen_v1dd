@@ -204,7 +204,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("data_dir", help="V1DD data directory", type=str)
-    parser.add_argument("save_dir", help="Stimulus analysis save directory", type=str, nargs="?", default="~/v1dd_stim_analyses")
+    parser.add_argument("save_dir", help="Stimulus analysis save directory", type=str, nargs="?")
     parser.add_argument("--test_mode", help="Whether to run in test mode (only run a few sessions)", action="store_true", default=False)
     parser.add_argument("--debug", help="Whether to print debug messages", action="store_true", default=False)
     args = parser.parse_args()
