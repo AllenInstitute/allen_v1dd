@@ -100,6 +100,7 @@ class RunStimulusAnalysis(ParallelProcess):
         session_group_path = session_id.split("_")
 
         # Load all stimulus analyses objects
+        print("Loading stimulus analysis objects")
         stim_analyses_by_plane = {
             plane: [
                 SA(session, plane, **kwargs)
@@ -109,7 +110,7 @@ class RunStimulusAnalysis(ParallelProcess):
         }
 
         # Load duplicate ROIs
-        debug("Loading duplicates")
+        debug("Loading duplicate ROIs")
         duplicate_roi_pairs = get_duplicate_roi_pairs_in_session(session)
         duplicate_rois = get_unique_duplicate_rois(duplicate_roi_pairs)
         is_ignored_duplicate = set() # (plane, roi)
