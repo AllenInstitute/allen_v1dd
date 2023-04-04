@@ -6,7 +6,7 @@ xarray
 
 # Statistical tools
 statsmodels
-sklearn
+scikit-learn
 
 # Plotting
 matplotlib
