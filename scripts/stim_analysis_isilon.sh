@@ -4,7 +4,7 @@ SCREEN_NAME="stim_analysis"
 OUTPUT_FILE="~/v1dd_stim_analyses"
 
 echo "Stimulus analysis output file: $OUTPUT_FILE"
-echo "Running stimulus analyses on screen \"$SCREEN_NAME\"..."
+echo "Running stimulus analyses on screen \"$SCREEN_NAME\""
 screen -dmS $SCREEN_NAME python data_processing/run_stimulus_analyses.py isilon $OUTPUT_FILE --debug
 echo
 echo "Type the following to enter screen:"

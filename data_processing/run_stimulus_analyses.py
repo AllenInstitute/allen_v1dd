@@ -230,8 +230,7 @@ if __name__ == "__main__":
     if TEST_MODE and TEST_MODE_MAX_SESSIONS > 0 and len(session_ids) >= TEST_MODE_MAX_SESSIONS:
         session_ids = session_ids[:TEST_MODE_MAX_SESSIONS]
 
-    # TODO: Remove this when running on all
-    session_ids = [sid for sid in session_ids if sid.startswith("M409828_1")]
+    if TEST_MODE: session_ids = [sid for sid in session_ids if sid.startswith("M409828_1")]
 
     print(f"Sessions to load ({len(session_ids)}):")
     print(session_ids)
