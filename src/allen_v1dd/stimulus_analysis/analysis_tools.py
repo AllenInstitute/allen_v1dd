@@ -4,6 +4,7 @@ import scipy.stats as st
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import seaborn as sns
+import h5py
 
 from . import fit_utils
 
@@ -25,6 +26,48 @@ def set_stylesheet():
     mpl.rcParams["axes.spines.top"] = False
     mpl.rcParams["axes.spines.right"] = False
 
+ANALYSIS_PARAMS = {}
+
+def set_analysis_file(filename):
+    ANALYSIS_PARAMS["stim_analysis_filename"] = filename
+
+def set_included_mice(mice_ids=None):
+    ANALYSIS_PARAMS["included_mice"] = mice_ids
+
+def set_included_columns(column_ids=None):
+    ANALYSIS_PARAMS["included_columns"] = column_ids
+
+def iter_plane_groups(filename: str=None):
+    """Iterate all plane groups in an h5 analysis file
+
+    Args:
+        filename (str, optional): Filename for h5 analysis file. Defaults to the filename set using set_analysis_file.
+
+    Raises:
+        ValueError: If no analysis file is supplied
+
+    Yields:
+        h5 group: All plane groups in analysis file
+    """
+    if filename is None:
+        filename = ANALYSIS_PARAMS.get("stim_analysis_filename")
+    if filename is None:
+        raise ValueError("No stimulus analysis file given. Set one using the set_analysis_file method or the filename argument.")
+
+    mice = ANALYSIS_PARAMS.get("included_mice")
+    cols = ANALYSIS_PARAMS.get("included_columns")
+
+    with h5py.File(filename, "r") as file:
+        for mouse in file.keys():
+            for colvol in file[mouse].keys():
+                for plane in file[mouse][colvol]:
+                    plane_group = file[mouse][colvol][plane]
+
+                    if "plane" not in plane_group.attrs: continue # Make sure it is actually a plane                    
+                    if mice is not None and plane_group.attrs["mouse"] not in mice: continue # Ignore mice
+                    if cols is not None and plane_group.attrs["column"] not in cols: continue # # Ignore columns
+
+                    yield plane_group
 
 def load_roi_metrics(metrics_file="../../data_frames/v1dd_metrics.csv", add_columns=True, remove_invalid=True, remove_duplicates=True):
     """Load metrics from the saved CSV file. Default file path is relative so can be accessed from notebooks.

@@ -2,8 +2,6 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-from datetime import datetime
-
 from allen_v1dd.client import OPhysSession
 
 class StimulusAnalysis(object):
@@ -11,14 +9,13 @@ class StimulusAnalysis(object):
     Designed to be subclassed to analyze particular stimuli.
     """
 
-    TIME_PER_FRAME = 0.165 # sec (ish)
-
     def __init__(self, stim_name: str, stim_abbrev: str, session: OPhysSession, plane: int, trace_type: str):
         self.stim_name = stim_name
         self.stim_abbrev = stim_abbrev
         self.session = session
         self.plane = plane
         self.trace_type = trace_type
+        self.authors = "Chase King"
 
         self.stim_table, self.stim_meta = session.get_stimulus_table(stim_name)
         self.is_roi_valid = session.is_roi_valid(plane)
@@ -29,16 +26,11 @@ class StimulusAnalysis(object):
         self.time_per_frame = self.get_traces().time.diff("time").median().item()
     
     def save_to_h5(self, group):
-        group.attrs["session_id"] = self.session.session_id
-        group.attrs["column"] = self.session.column_id
-        group.attrs["volume"] = self.session.volume_id
-        group.attrs["plane"] = self.plane
-        group.attrs["date_created"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        group.attrs["authors"] = "Chase King"
-        group.attrs["n_rois"] = self.n_rois
-        group.attrs["n_rois_valid"] = self.n_rois_valid
+        group.attrs["stim_name"] = self.stim_name
+        group.attrs["stim_abbrev"] = self.stim_abbrev
+        group.attrs["authors"] = self.authors
 
-        # This methos is to be overridden and called in subclasses
+        # This method is to be overridden and called in subclasses
 
     @property
     def spont_stim_table(self):

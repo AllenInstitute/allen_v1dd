@@ -1,7 +1,7 @@
 import numpy as np
 # from numpy import fft
 import scipy
-from tqdm.autonotebook import tqdm
+# from tqdm.autonotebook import tqdm
 
 from allen_v1dd.client import OPhysSession
 
@@ -42,7 +42,7 @@ def get_duplicate_roi_pairs_in_session(session: OPhysSession, comparison_metric_
 
     duplicate_roi_pairs = [] # (plane1, roi1, plane2, roi2, comparison_metrics_dict)
 
-    for plane_i in tqdm(range(len(planes) - 1), desc="Correlating ROI traces..."):
+    for plane_i in range(len(planes) - 1):
         plane_1, plane_2 = planes[plane_i], planes[plane_i+1]
 
         if trace_stimulus_type == "all":

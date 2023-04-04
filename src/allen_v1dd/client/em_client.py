@@ -204,7 +204,7 @@ class EMClient:
         return nuclei_in_box
 
 
-    def _get_synapses(self, pre_ids=None, post_ids=None, microns_position_mappings=None, soma_position_mappings=dict(pre_pt_root_id="pre_soma_position", post_pt_root_id="post_soma_position")):
+    def get_synapses(self, pre_ids=None, post_ids=None, microns_position_mappings=None, soma_position_mappings=dict(pre_pt_root_id="pre_soma_position", post_pt_root_id="post_soma_position")):
         synapses = self.materialize.synapse_query(pre_ids=pre_ids, post_ids=post_ids)
         synapses.reset_index(inplace=True) # Make from 0, 1, ..., n-1
 
@@ -229,15 +229,25 @@ class EMClient:
                 synapses[f"{new_position_column}_voxels"] = synapses[pt_root_id_col].apply(lambda pt_root_id: soma_positions_voxels.get(pt_root_id, None))
                 synapses[f"{new_position_column}_microns"] = synapses[pt_root_id_col].apply(lambda pt_root_id: soma_positions_microns.get(pt_root_id, None))
 
+            synapses["soma_soma_dist_horiz"] = synapses.apply(
+                lambda row: np.linalg.norm(row["pre_soma_position_microns"][::2] - row["post_soma_position_microns"][::2])
+                if row["pre_soma_position_microns"] is not None and row["post_soma_position_microns"] is not None
+                else np.inf, axis=1)
+
+            synapses["soma_soma_dist"] = synapses.apply(
+                lambda row: np.linalg.norm(row["pre_soma_position_microns"] - row["post_soma_position_microns"])
+                if row["pre_soma_position_microns"] is not None and row["post_soma_position_microns"] is not None
+                else np.inf, axis=1)
+
         return synapses
 
 
     def get_axonal_synapses(self, presyn_pt_root_id, microns_position_mappings=dict(pre_pt_position="synapse_position_microns"), **kwargs):
-        return self._get_synapses(pre_ids=presyn_pt_root_id, microns_position_mappings=microns_position_mappings, **kwargs)
+        return self.get_synapses(pre_ids=presyn_pt_root_id, microns_position_mappings=microns_position_mappings, **kwargs)
 
 
     def get_dendritic_synapses(self, postsyn_pt_root_id, microns_position_mappings=dict(post_pt_position="synapse_position_microns"), **kwargs):
-        return self._get_synapses(post_ids=postsyn_pt_root_id, microns_position_mappings=microns_position_mappings, **kwargs)
+        return self.get_synapses(post_ids=postsyn_pt_root_id, microns_position_mappings=microns_position_mappings, **kwargs)
 
 
     def _include_proofreading_inplace(self, table, flag, table_pt_root_id_key="pt_root_id", axon_proof_key="axon_proof", dendrite_proof_key="dendrite_proof"):
