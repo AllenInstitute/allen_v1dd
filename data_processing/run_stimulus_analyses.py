@@ -12,6 +12,7 @@ from allen_v1dd.stimulus_analysis import *
 from allen_v1dd.parallel_process import ParallelProcess
 from allen_v1dd.duplicate_rois import get_duplicate_roi_pairs_in_session, get_unique_duplicate_rois
 
+DEBUG = False
 TEST_MODE = False
 TEST_MODE_MAX_SESSIONS = 1
 TEST_MODE_MAX_PLANES = -1
@@ -91,7 +92,10 @@ class RunStimulusAnalysis(ParallelProcess):
                 - temp_output_file (str): Temporary output file path
                 - session_group_path (list[str]): Path to session group in the h5 file
         """
-        print(f"Running job for {session_id}")
+        def debug(msg):
+            if DEBUG: print(f"[{session_id}] {msg}")
+
+        debug("Starting job")
         session = client.load_ophys_session(session_id)
         session_group_path = session_id.split("_")
 
@@ -105,7 +109,7 @@ class RunStimulusAnalysis(ParallelProcess):
         }
 
         # Load duplicate ROIs
-        # print(f"Loading duplicates in {session.get_session_id()}")
+        debug("Loading duplicates")
         duplicate_roi_pairs = get_duplicate_roi_pairs_in_session(session)
         duplicate_rois = get_unique_duplicate_rois(duplicate_roi_pairs)
         is_ignored_duplicate = set() # (plane, roi)
@@ -123,6 +127,7 @@ class RunStimulusAnalysis(ParallelProcess):
                 plane_group = session_group.create_group(f"Plane_{plane}")
 
                 # Save the stimulus analysis information
+                debug(f"Loading and saving stimulus analyses for plane {plane}")
                 for analysis in stim_analyses:
                     group = plane_group.create_group(analysis.stim_name)
 
@@ -188,6 +193,8 @@ class RunStimulusAnalysis(ParallelProcess):
             ds = group.create_dataset("all_duplicates", data=all_duplicates)
             ds.attrs["notes"] = "Row format: [(best_plane, best_roi), (plane2, roi2), ...]"
 
+        debug("Done")
+
         return output_file, session_group_path
 
 
@@ -198,6 +205,7 @@ if __name__ == "__main__":
     parser.add_argument("data_dir", help="V1DD data directory", type=str)
     parser.add_argument("save_dir", help="Stimulus analysis save directory", type=str, nargs="?", default="~/v1dd_stim_analyses")
     parser.add_argument("--test_mode", help="Whether to run in test mode (only run a few sessions)", action="store_true", default=False)
+    parser.add_argument("--debug", help="Whether to print debug messages", action="store_true", default=False)
     args = parser.parse_args()
 
     if args.data_dir == "chase_local":
@@ -212,6 +220,7 @@ if __name__ == "__main__":
         base_folder = args.data_dir
 
     TEST_MODE = args.test_mode
+    DEBUG = args.debug
     client = OPhysClient(base_folder)
 
     # Load sessions
