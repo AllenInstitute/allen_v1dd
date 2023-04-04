@@ -91,6 +91,7 @@ class RunStimulusAnalysis(ParallelProcess):
                 - temp_output_file (str): Temporary output file path
                 - session_group_path (list[str]): Path to session group in the h5 file
         """
+        print(f"Running job for {session_id}")
         session = client.load_ophys_session(session_id)
         session_group_path = session_id.split("_")
 
