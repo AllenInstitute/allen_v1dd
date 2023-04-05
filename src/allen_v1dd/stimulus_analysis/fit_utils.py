@@ -56,6 +56,8 @@ def vonmises_two_peak_get_amplitude(x, params):
 def r2_score(y_true, y_pred):
     ss_residuals = float(np.sum(np.square(y_true - y_pred)))
     ss_total = float(np.sum(np.square(y_true - np.mean(y_true))))
+    if ss_total == 0:
+        return np.nan
     return 1 - (ss_residuals / ss_total)
 
 

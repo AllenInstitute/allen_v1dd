@@ -95,8 +95,8 @@ class RunStimulusAnalysis(ParallelProcess):
                 - temp_output_file (str): Temporary output file path
                 - session_group_path (list[str]): Path to session group in the h5 file
         """
-        def debug(msg):
-            if self.should_debug: print(f"[{session_id}] {msg}")
+        def debug(msg, force=False):
+            if force or self.should_debug: print(f"[{session_id}] {msg}")
 
         debug("Starting job")
         session = client.load_ophys_session(session_id)
@@ -142,7 +142,7 @@ class RunStimulusAnalysis(ParallelProcess):
                     try:
                         analysis.save_to_h5(group)
                     except:
-                        debug(f"Error while saving {analysis.stim_name} analyses in {session_id}, plane {plane}:")
+                        debug(f"Error while saving {analysis.stim_name} analyses in {session_id}, plane {plane}:", force=True)
                         print_exc()
 
                 # Save general plane information
@@ -189,7 +189,11 @@ class RunStimulusAnalysis(ParallelProcess):
 
                 # Run additional plane tasks
                 for task in additional_plane_group_tasks:
-                    task(plane_group)
+                    try:
+                        task(plane_group)
+                    except:
+                        debug(f"Error while running additional task {task}", force=True)
+                        print_exc()
 
             # Duplicate ROI information
             group = session_group.create_group("duplicate_rois")
@@ -206,10 +210,8 @@ class RunStimulusAnalysis(ParallelProcess):
         return output_file, session_group_path
 
     def output_handler(self, job_result):
-        import threading
         if job_result is None: return
         temp_file_path, session_group_path = job_result
-        print("output_handler on thread", threading.get_ident(), temp_file_path, session_group_path)
 
         with h5py.File(self.parent_file_path, "a") as parent_file: # Append to file
             dest_group = get_h5_group(parent_file, session_group_path[:-1]) # since the src is copied into the dest group
@@ -276,8 +278,8 @@ if __name__ == "__main__":
 
     # List of stimulus analysis classes and their respective kwargs
     stimulus_analysis_classes = [
-        (DriftingGratings, dict(dg_type="full", quick_load=test_mode, debug=debug)),
-        (DriftingGratings, dict(dg_type="windowed", quick_load=test_mode, debug=debug)),
+        (DriftingGratings, dict(dg_type="full", quick_load=test_mode, debug=(debug and test_mode))),
+        (DriftingGratings, dict(dg_type="windowed", quick_load=test_mode, debug=(debug and test_mode))),
         (LocallySparseNoise, dict()),
     ]
 
