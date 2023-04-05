@@ -1,5 +1,3 @@
-#!/bin/bash
-
 SCREEN_NAME="stim_analysis"
 OUTPUT_FILE="/home/chase/v1dd_stim_analyses"
 LOG_FILE="/home/chase/v1dd_stim_analyses_most_recent_log.txt"
