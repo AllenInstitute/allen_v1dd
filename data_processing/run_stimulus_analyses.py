@@ -97,6 +97,7 @@ class RunStimulusAnalysis(ParallelProcess):
                 - temp_output_file (str): Temporary output file path
                 - session_group_path (list[str]): Path to session group in the h5 file
         """
+        print("debug = {self.should_debug}")
         def debug(msg):
             if self.should_debug: print(f"[{session_id}] {msg}")
 
