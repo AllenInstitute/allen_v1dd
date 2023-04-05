@@ -61,7 +61,7 @@ class OPhysClient:
 
     def _update_file_cache(self):
         # Update nwb_files in cache
-        self._nwb_files = glob(path.join(self.database_path, "nwbs", "**", "*.nwb"), recursive=True) # look in subfolders
+        self._nwb_files = glob(path.join(self.database_path, "nwbs", "processed", "*.nwb"), recursive=True) # look in subfolders
 
     def get_all_session_ids(self) -> list:
         """Get all session IDs in the database.

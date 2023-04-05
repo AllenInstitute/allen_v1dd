@@ -62,23 +62,21 @@ class RunStimulusAnalysis(ParallelProcess):
         job_results = self.run(args, parallel=True) # list of (file, group) tuples (return values of job)
         
         # Once jobs are done, merge the temporary files into a single file
-        print(f"Finished jobs. Merging {len(job_results)} files...")
+        # print(f"Finished jobs. Merging {len(job_results)} files...")
 
-        with h5py.File(self.parent_file_path, "w") as parent_file:
-            for temp_file_path, session_group_path in job_results:
-                dest_group = get_h5_group(parent_file, session_group_path[:-1]) # since the src is copied into the dest group
+        # with h5py.File(self.parent_file_path, "w") as parent_file:
+        #     for temp_file_path, session_group_path in job_results:
+        #         dest_group = get_h5_group(parent_file, session_group_path[:-1]) # since the src is copied into the dest group
 
-                with h5py.File(temp_file_path, "r") as temp_file:
-                    # Copy the group to the parent file
-                    src_group = get_h5_group(temp_file, session_group_path)
-                    parent_file.copy(source=src_group, dest=dest_group)
+        #         with h5py.File(temp_file_path, "r") as temp_file:
+        #             # Copy the group to the parent file
+        #             src_group = get_h5_group(temp_file, session_group_path)
+        #             parent_file.copy(source=src_group, dest=dest_group)
 
-                # Delete the temp file
-                if not self.test_mode:
-                    os.remove(temp_file_path)
+        #         # Delete the temp file
+        #         if not self.test_mode:
+        #             os.remove(temp_file_path)
     
-        print("Computing duplicate ROIs")
-
         print(f"Done! Parent file: {self.parent_file_path}")
 
 
@@ -97,7 +95,6 @@ class RunStimulusAnalysis(ParallelProcess):
                 - temp_output_file (str): Temporary output file path
                 - session_group_path (list[str]): Path to session group in the h5 file
         """
-        print("debug = {self.should_debug}")
         def debug(msg):
             if self.should_debug: print(f"[{session_id}] {msg}")
 
@@ -138,7 +135,7 @@ class RunStimulusAnalysis(ParallelProcess):
                 plane_group = session_group.create_group(f"Plane_{plane}")
 
                 # Save the stimulus analysis information
-                debug(f"Loading and saving stimulus analyses for plane {plane}")
+                # debug(f"Loading and saving stimulus analyses for plane {plane}")
                 for analysis in stim_analyses:
                     group = plane_group.create_group(analysis.stim_name)
 
@@ -207,6 +204,26 @@ class RunStimulusAnalysis(ParallelProcess):
         debug("Done")
 
         return output_file, session_group_path
+
+    def output_handler(self, job_result):
+        import threading
+        if job_result is None: return
+        temp_file_path, session_group_path = job_result
+        print("output_handler on thread", threading.get_ident(), temp_file_path, session_group_path)
+
+        with h5py.File(self.parent_file_path, "a") as parent_file: # Append to file
+            dest_group = get_h5_group(parent_file, session_group_path[:-1]) # since the src is copied into the dest group
+
+            print("   dest", dest_group)
+
+            with h5py.File(temp_file_path, "r") as temp_file:
+                # Copy the group to the parent file
+                src_group = get_h5_group(temp_file, session_group_path)
+                print("   src", src_group)
+                parent_file.copy(source=src_group, dest=dest_group)
+
+        # Delete the temp file
+        # os.remove(temp_file_path)
 
 
 if __name__ == "__main__":
