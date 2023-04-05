@@ -276,8 +276,8 @@ if __name__ == "__main__":
 
     # List of stimulus analysis classes and their respective kwargs
     stimulus_analysis_classes = [
-        # (DriftingGratings, dict(dg_type="full", quick_load=test_mode, debug=debug)),
-        # (DriftingGratings, dict(dg_type="windowed", quick_load=test_mode, debug=debug)),
+        (DriftingGratings, dict(dg_type="full", quick_load=test_mode, debug=debug)),
+        (DriftingGratings, dict(dg_type="windowed", quick_load=test_mode, debug=debug)),
         (LocallySparseNoise, dict()),
     ]
 
