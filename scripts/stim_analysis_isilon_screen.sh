@@ -5,6 +5,8 @@ SCREEN_NAME="stim_analysis"
 echo "Running stimulus analyses on screen \"$SCREEN_NAME\""
 
 cd "$( dirname "$0" )"
+pwd
+ls
 screen -dmS $SCREEN_NAME sh stim_analysis_isilon.sh
 
 echo
