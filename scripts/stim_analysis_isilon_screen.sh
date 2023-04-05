@@ -7,9 +7,10 @@ echo "Running stimulus analyses on screen \"$SCREEN_NAME\""
 
 cd "$( dirname "$0" )"
 file stim_analysis_isilon.sh
-screen -dmS $SCREEN_NAME bash -c "./stim_analysis_isilon.sh |& tee $LOG_FILE" # ; exec bash
+# screen -dmS $SCREEN_NAME bash -c "./stim_analysis_isilon.sh |& tee $LOG_FILE" # ; exec bash
+screen -dmS $SCREEN_NAME bash -c "./stim_analysis_isilon.sh; exec bash"
 
 echo
-echo "  screen -r $SCREEN_NAME          to enter screen"
-echo "  less $LOG_FILE                  to view log file"
+echo "  ENTER SCREEN:  screen -r $SCREEN_NAME"
+# echo "  less $LOG_FILE                  to view log file"
 echo
