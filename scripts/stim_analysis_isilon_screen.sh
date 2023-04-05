@@ -7,7 +7,8 @@ echo "Running stimulus analyses on screen \"$SCREEN_NAME\""
 cd "$( dirname "$0" )"
 pwd
 ls
-screen -dmS $SCREEN_NAME sh stim_analysis_isilon.sh
+screen -dmS $SCREEN_NAME "sh stim_analysis_isilon.sh"
+screen -ls
 
 echo
 echo "Type the following to enter screen:"
