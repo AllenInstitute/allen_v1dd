@@ -216,12 +216,9 @@ class RunStimulusAnalysis(ParallelProcess):
         with h5py.File(self.parent_file_path, "a") as parent_file: # Append to file
             dest_group = get_h5_group(parent_file, session_group_path[:-1]) # since the src is copied into the dest group
 
-            print("   dest", dest_group)
-
             with h5py.File(temp_file_path, "r") as temp_file:
                 # Copy the group to the parent file
                 src_group = get_h5_group(temp_file, session_group_path)
-                print("   src", src_group)
                 parent_file.copy(source=src_group, dest=dest_group)
 
         # Delete the temp file
