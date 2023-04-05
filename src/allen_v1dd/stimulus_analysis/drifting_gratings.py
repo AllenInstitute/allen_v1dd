@@ -139,6 +139,10 @@ class DriftingGratings(StimulusAnalysis):
             if a + b == 0: return np.nan
             return (a - b) / (a + b)
         
+        # If DG analyses are not in the file, then we can't compute anything
+        if not ("drifting_gratings_windowed" in plane_group.keys() and "drifting_gratings_full" in plane_group.keys()):
+            return
+
         dgw = plane_group["drifting_gratings_windowed"]
         dgf = plane_group["drifting_gratings_full"]
         dgw_trial_responses = dgw["trial_responses"][()]
@@ -173,7 +177,7 @@ class DriftingGratings(StimulusAnalysis):
 
         # Wrapper method to ignore "RuntimeWarning: Mean of empty slice" warnings
         def nanmean(a):
-            return np.nan if len(a) == 0 else np.nanmean(a)
+            return np.nan if (len(a) == 0 or np.all(np.isnan(a))) else np.nanmean(a)
 
         for roi in valid_rois:
             pref_dir_idx, pref_sf_idx = dgw_pref_cond_idxs[roi]

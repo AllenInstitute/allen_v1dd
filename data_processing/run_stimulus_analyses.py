@@ -12,11 +12,6 @@ from allen_v1dd.stimulus_analysis import *
 from allen_v1dd.parallel_process import ParallelProcess
 from allen_v1dd.duplicate_rois import get_duplicate_roi_pairs_in_session, get_unique_duplicate_rois
 
-DEBUG = False
-TEST_MODE = False
-TEST_MODE_MAX_SESSIONS = 1
-TEST_MODE_MAX_PLANES = -1
-
 def get_h5_group(file, group_path):
     curr_group = file
     for name in group_path:
@@ -30,7 +25,7 @@ def get_h5_group(file, group_path):
 
 
 class RunStimulusAnalysis(ParallelProcess):
-    def __init__(self, ophys_client, session_ids, stim_analysis_classes, additional_plane_group_tasks, save_dir):
+    def __init__(self, ophys_client, session_ids, stim_analysis_classes, additional_plane_group_tasks, save_dir, task_params):
         super().__init__(save_dir=save_dir)
 
         self.ophys_client = ophys_client
@@ -38,6 +33,15 @@ class RunStimulusAnalysis(ParallelProcess):
         self.stim_analysis_classes = stim_analysis_classes
         self.additional_plane_group_tasks = additional_plane_group_tasks
         self.parent_file_path = path.join(self.get_save_dir(), "stimulus_analyses.h5")
+        self.task_params = task_params
+
+    @property
+    def test_mode(self):
+        return self.task_params is not None and self.task_params.get("test", False)
+    
+    @property
+    def should_debug(self):
+        return self.task_params is not None and self.task_params.get("debug", False)
 
 
     def start(self):
@@ -70,7 +74,8 @@ class RunStimulusAnalysis(ParallelProcess):
                     parent_file.copy(source=src_group, dest=dest_group)
 
                 # Delete the temp file
-                os.remove(temp_file_path)
+                if not self.test_mode:
+                    os.remove(temp_file_path)
     
         print("Computing duplicate ROIs")
 
@@ -93,20 +98,24 @@ class RunStimulusAnalysis(ParallelProcess):
                 - session_group_path (list[str]): Path to session group in the h5 file
         """
         def debug(msg):
-            if DEBUG: print(f"[{session_id}] {msg}")
+            if self.should_debug: print(f"[{session_id}] {msg}")
 
         debug("Starting job")
         session = client.load_ophys_session(session_id)
         session_group_path = session_id.split("_")
 
         # Load all stimulus analyses objects
-        print("Loading stimulus analysis objects")
+        debug("Loading stimulus analysis objects")
+        test_max_planes = self.task_params.get("test_max_planes", -1)
+        planes_to_load = session.get_planes()
+        if self.test_mode and test_max_planes > 0:
+            planes_to_load = planes_to_load[-test_max_planes:]
         stim_analyses_by_plane = {
             plane: [
                 SA(session, plane, **kwargs)
                 for SA, kwargs in stim_analysis_classes
             ]
-            for plane in (session.get_planes()[-min(TEST_MODE_MAX_PLANES, len(session.get_planes())):] if (TEST_MODE and TEST_MODE_MAX_PLANES > 0) else session.get_planes())
+            for plane in planes_to_load
         }
 
         # Load duplicate ROIs
@@ -135,7 +144,7 @@ class RunStimulusAnalysis(ParallelProcess):
                     try:
                         analysis.save_to_h5(group)
                     except:
-                        print(f"Error while saving {analysis.stim_name} analyses in {session_id}, plane {plane}:")
+                        debug(f"Error while saving {analysis.stim_name} analyses in {session_id}, plane {plane}:")
                         print_exc()
 
                 # Save general plane information
@@ -220,25 +229,37 @@ if __name__ == "__main__":
     else:
         base_folder = args.data_dir
 
-    TEST_MODE = args.test_mode
-    DEBUG = args.debug
+    test_mode = args.test_mode
+    debug = args.debug
+    task_params = {
+        "debug": debug,
+        "test": test_mode
+    }
+
     client = OPhysClient(base_folder)
 
     # Load sessions
     session_ids = client.get_all_session_ids()
+    test_max_sessions = task_params.get("test_mode_max_planes", -1)
 
-    if TEST_MODE and TEST_MODE_MAX_SESSIONS > 0 and len(session_ids) >= TEST_MODE_MAX_SESSIONS:
-        session_ids = session_ids[:TEST_MODE_MAX_SESSIONS]
+    if test_mode and test_max_sessions > 0 and len(session_ids) >= test_max_sessions:
+        session_ids = session_ids[:test_max_sessions]
 
-    if TEST_MODE: session_ids = [sid for sid in session_ids if sid.startswith("M409828_1")]
+    # Test mode: Only M409828 column 1
+    # if test_mode: session_ids = [sid for sid in session_ids if sid.startswith("M409828_1")]
+
+    # Test mode: Two sessions from two mice (to test merging)
+    if test_mode:
+        session_ids = ["M409828_13", "M416296_13"]
+        task_params["test_max_planes"] = 1
 
     print(f"Sessions to load ({len(session_ids)}):")
     print(session_ids)
 
     # List of stimulus analysis classes and their respective kwargs
     stimulus_analysis_classes = [
-        (DriftingGratings, dict(dg_type="full", quick_load=False, debug=False)),
-        (DriftingGratings, dict(dg_type="windowed", quick_load=False, debug=False)),
+        # (DriftingGratings, dict(dg_type="full", quick_load=test_mode, debug=debug)),
+        # (DriftingGratings, dict(dg_type="windowed", quick_load=test_mode, debug=debug)),
         (LocallySparseNoise, dict()),
     ]
 
@@ -249,5 +270,5 @@ if __name__ == "__main__":
     ]
 
     # Process all metrics-loading in parallel
-    process = RunStimulusAnalysis(client, session_ids, stimulus_analysis_classes, additional_plane_group_tasks, args.save_dir)
+    process = RunStimulusAnalysis(client, session_ids, stimulus_analysis_classes, additional_plane_group_tasks, args.save_dir, task_params)
     process.start()
