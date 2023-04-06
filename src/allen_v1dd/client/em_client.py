@@ -77,10 +77,10 @@ class EMClient:
         self.synapse_table = self.cave_client.materialize.synapse_table
 
     @staticmethod
-    def init_microns():
+    def init_microns(datastack_name="minnie65_public_v343"):
         from standard_transform import minnie_transform_nm
         return EMClient(
-            datastack_name="minnie65_public_v343",
+            datastack_name=datastack_name,
             server_address=None,
             nucleus_table="aibs_soma_nuc_metamodel_preds_v117",
             cell_type_table="aibs_soma_nuc_metamodel_preds_v117",
@@ -151,7 +151,10 @@ class EMClient:
         if type(pt_root_ids) is int:
             somas = self.query_table(self.nucleus_table, filter_equal_dict=dict(pt_root_id=pt_root_ids))
         else:
-            somas = self.query_table(self.nucleus_table, filter_in_dict=dict(pt_root_id=pt_root_ids))
+            kwargs = {}
+            if pt_root_ids is not None:
+                kwargs["filter_in_dict"] = dict(pt_root_id=pt_root_ids)
+            somas = self.query_table(self.nucleus_table, **kwargs)
         somas.drop_duplicates("pt_root_id", inplace=True)
         self.df_position_to_microns(somas, "pt_position", "position_microns")
         return somas
@@ -333,13 +336,19 @@ class EMClient:
 
     def get_coregistration_table(self, drop_duplicates=True, include_proofreading=True):
         coreg_table = self.query_table("manual_pilot_functional_coregistration_v1")
+        coreg_table["ophys_mouse"] = 409828
+        coreg_table["ophys_column"] = coreg_table.session
+        coreg_table["ophys_volume"] = coreg_table.scan_idx
         coreg_table["ophys_session_id"] = coreg_table.apply(lambda row: f"M409828_{row.session}{row.scan_idx}", axis=1)
         coreg_table["ophys_plane"] = coreg_table.field + 1
         coreg_table["ophys_roi"] = coreg_table.unit_id
         coreg_table["roi"] = coreg_table.apply(lambda row: f"{row.ophys_session_id}_{row.ophys_plane}_{row.ophys_roi}", axis=1)
         
+        if drop_duplicates:
+            coreg_table.drop_duplicates("pt_root_id", inplace=True)
+            coreg_table.reset_index(inplace=True)
+
         self.df_position_to_microns(coreg_table, "pt_position", "position_microns")
-        
         self._include_proofreading_inplace(coreg_table, flag=include_proofreading)
         
         return coreg_table

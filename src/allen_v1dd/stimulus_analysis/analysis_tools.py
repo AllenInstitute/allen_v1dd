@@ -29,6 +29,8 @@ def set_stylesheet():
 ANALYSIS_PARAMS = {}
 
 def set_analysis_file(filename):
+    # This method resets the analysis parameters
+    ANALYSIS_PARAMS.clear()
     ANALYSIS_PARAMS["stim_analysis_filename"] = filename
 
 def set_included_mice(mice_ids=None):
@@ -36,6 +38,12 @@ def set_included_mice(mice_ids=None):
 
 def set_included_columns(column_ids=None):
     ANALYSIS_PARAMS["included_columns"] = column_ids
+
+def set_included_volumes(volume_ids=None):
+    ANALYSIS_PARAMS["included_volumes"] = volume_ids
+
+def set_included_planes(plane_ids=None):
+    ANALYSIS_PARAMS["included_planes"] = plane_ids
 
 def iter_plane_groups(filename: str=None):
     """Iterate all plane groups in an h5 analysis file
@@ -56,16 +64,25 @@ def iter_plane_groups(filename: str=None):
 
     mice = ANALYSIS_PARAMS.get("included_mice")
     cols = ANALYSIS_PARAMS.get("included_columns")
+    vols = ANALYSIS_PARAMS.get("included_volumes")
+    planes = ANALYSIS_PARAMS.get("included_planes")
 
     with h5py.File(filename, "r") as file:
         for mouse in file.keys():
             for colvol in file[mouse].keys():
-                for plane in file[mouse][colvol]:
+                plane_keys = file[mouse][colvol].keys()
+                for plane in plane_keys:
                     plane_group = file[mouse][colvol][plane]
 
                     if "plane" not in plane_group.attrs: continue # Make sure it is actually a plane                    
                     if mice is not None and plane_group.attrs["mouse"] not in mice: continue # Ignore mice
-                    if cols is not None and plane_group.attrs["column"] not in cols: continue # # Ignore columns
+                    if cols is not None and plane_group.attrs["column"] not in cols: continue # Ignore columns
+                    if vols is not None and plane_group.attrs["volume"] not in vols: continue # Ignore volumes
+                    if planes is not None and len(plane_keys) > 1 and plane_group.attrs["plane"] not in planes: continue # Ignore planes
+
+                    # Quality check: must have >0 valid ROIs
+                    # May remove this later...
+                    if plane_group.attrs["n_rois_valid"] == 0: continue
 
                     yield plane_group
 
