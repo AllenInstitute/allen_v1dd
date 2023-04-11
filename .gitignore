@@ -1,5 +1,8 @@
-# Data frames
-data_frames/*.h5
+# Data files
+*.h5
+
+# Local cache
+cache/
 
 # Mac
 .DS_Store

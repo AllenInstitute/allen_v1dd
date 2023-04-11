@@ -37,14 +37,20 @@ cd allen_v1dd
 This will close this git repository into the `allen_v1dd` folder.
 
 ## (2) Creating conda environment
-The environment I use is called `allen_v1dd` and is saved in `environment.yml`. To create a conda env from this file and install packages, run (from the main directory)
+The environment I use is called `allen_v1dd` and is saved in `environment.yml`. To create a conda env from this file, run (from the main directory)
 ```
 conda env create -f environment.yml
+```
+If you are having trouble building from the `environment.yml` file, then create a new conda python environment; I am specifically using Python 3.10.9:
+```
+conda create -n allen_v1dd python=3.10.9
+```
+Now that the environment has been created, run the following commands to install dependencies:
+```
 conda activate allen_v1dd
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
-If you are having trouble building from the `environment.yml` file, then create a new conda python environment; I am specifically using Python 3.10.9.
 
 ## (3) Install the `allen_v1dd` package locally
 From within the parent directory, `allen_v1dd`, run

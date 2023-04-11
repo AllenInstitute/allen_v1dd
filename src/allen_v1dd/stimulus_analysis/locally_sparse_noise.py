@@ -18,6 +18,8 @@ class LocallySparseNoise(StimulusAnalysis):
     def __init__(self, session, plane, trace_type="dff"):
         super().__init__("locally_sparse_noise", "lsn", session, plane, trace_type)
 
+        self.authors = "Chase King" # TODO Fill in with Reza's group once they share code
+
         if trace_type == "dff":
             self.baseline_time_window = (-1, 0) # Baseline is the 1 sec window before (note this spans 3 different stimulus frames)
             self.response_time_window = (0, 4*self.time_per_frame) # Response is 0.67 sec window after (note this spans the desired stimulus along with the next one)
@@ -59,16 +61,16 @@ class LocallySparseNoise(StimulusAnalysis):
                 resp_on = self.has_receptive_field(roi, rf_type="on")
                 resp_off = self.has_receptive_field(roi, rf_type="off")
                 is_responsive[roi, :] = [resp_on, resp_off, resp_on or resp_off]
-        dataset = group.create_dataset("is_responsive", data=is_responsive)
-        dataset.attrs["columns"] = ["has_rf_on", "has_rf_off", "has_rf_on_or_off"]
+        ds = group.create_dataset("is_responsive", data=is_responsive)
+        ds.attrs["columns"] = ["has_rf_on", "has_rf_off", "has_rf_on_or_off"]
 
         # Receptive fields
-        dataset = group.create_dataset("receptive_fields", data=self.receptive_fields)
-        dataset.attrs["dimensions"] = ["roi", "on_off", "row", "column"]
+        ds = group.create_dataset("receptive_fields", data=self.receptive_fields)
+        ds.attrs["dimensions"] = ["roi", "on_off", "row", "column"]
         
         # RF centers
-        dataset = group.create_dataset("rf_centers", data=self.rf_centers)
-        dataset.attrs["dimensions"] = ["roi", "on (0) and off (1)", "altitude (0) and azimuth (1) (deg)"]
+        ds = group.create_dataset("rf_centers", data=self.rf_centers)
+        ds.attrs["dimensions"] = ["roi", "on (0) and off (1)", "altitude (0) and azimuth (1) (deg)"]
 
         # RF centers (computed by argmax)
         rf_centers_argmax = np.full((self.n_rois, 2, 2), np.nan)
@@ -79,16 +81,10 @@ class LocallySparseNoise(StimulusAnalysis):
                 azi, alt = np.unravel_index(rf.argmax(), rf.shape) # note the ordering
                 alt, azi = self.point_to_alt_azi(alt_ctr=alt+0.5, azi_ctr=azi+0.5) # Add 0.5 to center in pixel
                 rf_centers_argmax[roi, onoff, :] = (azi, alt)
-        dataset = group.create_dataset("rf_centers_argmax", data=rf_centers_argmax)
-        dataset.attrs["dimensions"] = ["roi", "on (0) and off (1)", "altitude (0) and azimuth (1) (deg)"]
+        ds = group.create_dataset("rf_centers_argmax", data=rf_centers_argmax)
+        ds.attrs["dimensions"] = ["roi", "on (0) and off (1)", "altitude (0) and azimuth (1) (deg)"]
 
-        # ROI image mask centroids
-        roi_centroids = np.full((self.n_rois, 2), np.nan, dtype=float)
-        for roi in range(self.n_rois):
-            if self.is_roi_valid[roi]:
-                roi_centroids[roi, :] = np.mean(np.where(self.session.get_roi_image_mask(self.plane, roi)), axis=1)
-        dataset = group.create_dataset("roi_centroids", data=roi_centroids)
-        dataset.attrs["columns"] = ["centroid_row", "centroid_column"]
+        
 
     @property
     def duration(self):

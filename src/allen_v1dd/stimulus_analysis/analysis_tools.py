@@ -4,6 +4,7 @@ import scipy.stats as st
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import seaborn as sns
+import h5py
 
 from . import fit_utils
 
@@ -25,6 +26,65 @@ def set_stylesheet():
     mpl.rcParams["axes.spines.top"] = False
     mpl.rcParams["axes.spines.right"] = False
 
+ANALYSIS_PARAMS = {}
+
+def set_analysis_file(filename):
+    # This method resets the analysis parameters
+    ANALYSIS_PARAMS.clear()
+    ANALYSIS_PARAMS["stim_analysis_filename"] = filename
+
+def set_included_mice(mice_ids=None):
+    ANALYSIS_PARAMS["included_mice"] = mice_ids
+
+def set_included_columns(column_ids=None):
+    ANALYSIS_PARAMS["included_columns"] = column_ids
+
+def set_included_volumes(volume_ids=None):
+    ANALYSIS_PARAMS["included_volumes"] = volume_ids
+
+def set_included_planes(plane_ids=None):
+    ANALYSIS_PARAMS["included_planes"] = plane_ids
+
+def iter_plane_groups(filename: str=None):
+    """Iterate all plane groups in an h5 analysis file
+
+    Args:
+        filename (str, optional): Filename for h5 analysis file. Defaults to the filename set using set_analysis_file.
+
+    Raises:
+        ValueError: If no analysis file is supplied
+
+    Yields:
+        h5 group: All plane groups in analysis file
+    """
+    if filename is None:
+        filename = ANALYSIS_PARAMS.get("stim_analysis_filename")
+    if filename is None:
+        raise ValueError("No stimulus analysis file given. Set one using the set_analysis_file method or the filename argument.")
+
+    mice = ANALYSIS_PARAMS.get("included_mice")
+    cols = ANALYSIS_PARAMS.get("included_columns")
+    vols = ANALYSIS_PARAMS.get("included_volumes")
+    planes = ANALYSIS_PARAMS.get("included_planes")
+
+    with h5py.File(filename, "r") as file:
+        for mouse in file.keys():
+            for colvol in file[mouse].keys():
+                plane_keys = file[mouse][colvol].keys()
+                for plane in plane_keys:
+                    plane_group = file[mouse][colvol][plane]
+
+                    if "plane" not in plane_group.attrs: continue # Make sure it is actually a plane                    
+                    if mice is not None and plane_group.attrs["mouse"] not in mice: continue # Ignore mice
+                    if cols is not None and plane_group.attrs["column"] not in cols: continue # Ignore columns
+                    if vols is not None and plane_group.attrs["volume"] not in vols: continue # Ignore volumes
+                    if planes is not None and len(plane_keys) > 1 and plane_group.attrs["plane"] not in planes: continue # Ignore planes
+
+                    # Quality check: must have >0 valid ROIs
+                    # May remove this later...
+                    if plane_group.attrs["n_rois_valid"] == 0: continue
+
+                    yield plane_group
 
 def load_roi_metrics(metrics_file="../../data_frames/v1dd_metrics.csv", add_columns=True, remove_invalid=True, remove_duplicates=True):
     """Load metrics from the saved CSV file. Default file path is relative so can be accessed from notebooks.

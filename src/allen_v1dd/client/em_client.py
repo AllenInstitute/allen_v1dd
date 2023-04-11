@@ -77,10 +77,10 @@ class EMClient:
         self.synapse_table = self.cave_client.materialize.synapse_table
 
     @staticmethod
-    def init_microns():
+    def init_microns(datastack_name="minnie65_public_v343"):
         from standard_transform import minnie_transform_nm
         return EMClient(
-            datastack_name="minnie65_public_v343",
+            datastack_name=datastack_name,
             server_address=None,
             nucleus_table="aibs_soma_nuc_metamodel_preds_v117",
             cell_type_table="aibs_soma_nuc_metamodel_preds_v117",
@@ -151,7 +151,10 @@ class EMClient:
         if type(pt_root_ids) is int:
             somas = self.query_table(self.nucleus_table, filter_equal_dict=dict(pt_root_id=pt_root_ids))
         else:
-            somas = self.query_table(self.nucleus_table, filter_in_dict=dict(pt_root_id=pt_root_ids))
+            kwargs = {}
+            if pt_root_ids is not None:
+                kwargs["filter_in_dict"] = dict(pt_root_id=pt_root_ids)
+            somas = self.query_table(self.nucleus_table, **kwargs)
         somas.drop_duplicates("pt_root_id", inplace=True)
         self.df_position_to_microns(somas, "pt_position", "position_microns")
         return somas
@@ -204,7 +207,7 @@ class EMClient:
         return nuclei_in_box
 
 
-    def _get_synapses(self, pre_ids=None, post_ids=None, microns_position_mappings=None, soma_position_mappings=dict(pre_pt_root_id="pre_soma_position", post_pt_root_id="post_soma_position")):
+    def get_synapses(self, pre_ids=None, post_ids=None, microns_position_mappings=None, soma_position_mappings=dict(pre_pt_root_id="pre_soma_position", post_pt_root_id="post_soma_position")):
         synapses = self.materialize.synapse_query(pre_ids=pre_ids, post_ids=post_ids)
         synapses.reset_index(inplace=True) # Make from 0, 1, ..., n-1
 
@@ -229,15 +232,25 @@ class EMClient:
                 synapses[f"{new_position_column}_voxels"] = synapses[pt_root_id_col].apply(lambda pt_root_id: soma_positions_voxels.get(pt_root_id, None))
                 synapses[f"{new_position_column}_microns"] = synapses[pt_root_id_col].apply(lambda pt_root_id: soma_positions_microns.get(pt_root_id, None))
 
+            synapses["soma_soma_dist_horiz"] = synapses.apply(
+                lambda row: np.linalg.norm(row["pre_soma_position_microns"][::2] - row["post_soma_position_microns"][::2])
+                if row["pre_soma_position_microns"] is not None and row["post_soma_position_microns"] is not None
+                else np.inf, axis=1)
+
+            synapses["soma_soma_dist"] = synapses.apply(
+                lambda row: np.linalg.norm(row["pre_soma_position_microns"] - row["post_soma_position_microns"])
+                if row["pre_soma_position_microns"] is not None and row["post_soma_position_microns"] is not None
+                else np.inf, axis=1)
+
         return synapses
 
 
     def get_axonal_synapses(self, presyn_pt_root_id, microns_position_mappings=dict(pre_pt_position="synapse_position_microns"), **kwargs):
-        return self._get_synapses(pre_ids=presyn_pt_root_id, microns_position_mappings=microns_position_mappings, **kwargs)
+        return self.get_synapses(pre_ids=presyn_pt_root_id, microns_position_mappings=microns_position_mappings, **kwargs)
 
 
     def get_dendritic_synapses(self, postsyn_pt_root_id, microns_position_mappings=dict(post_pt_position="synapse_position_microns"), **kwargs):
-        return self._get_synapses(post_ids=postsyn_pt_root_id, microns_position_mappings=microns_position_mappings, **kwargs)
+        return self.get_synapses(post_ids=postsyn_pt_root_id, microns_position_mappings=microns_position_mappings, **kwargs)
 
 
     def _include_proofreading_inplace(self, table, flag, table_pt_root_id_key="pt_root_id", axon_proof_key="axon_proof", dendrite_proof_key="dendrite_proof"):
@@ -323,13 +336,19 @@ class EMClient:
 
     def get_coregistration_table(self, drop_duplicates=True, include_proofreading=True):
         coreg_table = self.query_table("manual_pilot_functional_coregistration_v1")
+        coreg_table["ophys_mouse"] = 409828
+        coreg_table["ophys_column"] = coreg_table.session
+        coreg_table["ophys_volume"] = coreg_table.scan_idx
         coreg_table["ophys_session_id"] = coreg_table.apply(lambda row: f"M409828_{row.session}{row.scan_idx}", axis=1)
         coreg_table["ophys_plane"] = coreg_table.field + 1
         coreg_table["ophys_roi"] = coreg_table.unit_id
         coreg_table["roi"] = coreg_table.apply(lambda row: f"{row.ophys_session_id}_{row.ophys_plane}_{row.ophys_roi}", axis=1)
         
+        if drop_duplicates:
+            coreg_table.drop_duplicates("pt_root_id", inplace=True)
+            coreg_table.reset_index(inplace=True)
+
         self.df_position_to_microns(coreg_table, "pt_position", "position_microns")
-        
         self._include_proofreading_inplace(coreg_table, flag=include_proofreading)
         
         return coreg_table
