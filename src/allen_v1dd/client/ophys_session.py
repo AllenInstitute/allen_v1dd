@@ -567,6 +567,8 @@ class OPhysSession:
             elif trace_type == "events":
                 # different for events
                 trace_grp = nwb_file[f'processing/l0_events_plane{self.plane_to_internal(plane)}/DfOverF/l0_events']
+            elif trace_type == "cascade":
+                trace_grp = np.load(f'/home/david.wyrick/projects/V1DD/data/predictions_dff_{self.mouse_id}_{self.column_id}{self.volume_id}_{plane}_all-rois.npz')
             else:
                 raise LookupError(f'Do not understand "trace_type", should be one of the following ["raw", "demixed", "neuropil", "sutracted", "dff", "events"]. Got "{trace_type}".')
 
