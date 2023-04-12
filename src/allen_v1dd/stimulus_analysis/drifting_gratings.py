@@ -9,6 +9,33 @@ from .stimulus_analysis import StimulusAnalysis
 from .proba_utils import get_chisq_response_proba
 from .fit_utils import vonmises_two_peak, vonmises_two_peak_fit, vonmises_two_peak_get_pref_dir_and_amplitude, r2_score
 
+def load_dg_xarray_from_h5(group, key):
+    """Loads a drifting grating xarray from an h5 group.
+
+    Args:
+        group (hdf5 file group): Either a DGW or DGF group in the hdf5 file
+        key (str): Key of array in group (e.g., "trial_responses")
+
+    Returns:
+        xarray.DataArray: xarray with labeled dimensions
+    """
+    dims = group[key].attrs["dimensions"]
+    data = group[key][()]
+    coords = {}
+
+    for dim_name, dim_shape in zip(dims, data.shape):
+        if dim_name == "roi":
+            coords[dim_name] = range(dim_shape)
+        elif dim_name == "direction":
+            coords[dim_name] = group.attrs["directions"]
+        elif dim_name == "spatial_frequency":
+            coords[dim_name] = group.attrs["spatial_frequencies"]
+        elif dim_name == "trial":
+            # coords[dim_name] = range(group.attrs["n_trials"])
+            coords[dim_name] = range(dim_shape)
+    
+    return xr.DataArray(data=data, dims=dims, coords=coords)
+
 class DriftingGratings(StimulusAnalysis):
     """Used to analyze the drifting gratings stimulus.
     """
@@ -235,24 +262,6 @@ class DriftingGratings(StimulusAnalysis):
         for metric, values in metrics.items():
             ds = ssi_group.create_dataset(metric, data=values)
             ds.attrs["desc"] = metrics_descs[metric]
-
-
-    @staticmethod
-    def load_dg_xarray_from_h5(group, key):
-        dims = group[key].attrs["dimensions"]
-        coords = {}
-
-        for dim in dims:
-            if dim == "roi":
-                coords[dim] = range(group.attrs["n_rois"])
-            elif dim == "direction":
-                coords[dim] = group.attrs["directions"]
-            elif dim == "spatial_frequency":
-                coords[dim] = group.attrs["spatial_frequencies"]
-            elif dim == "trial":
-                coords[dim] = range(group.attrs["n_trials"])
-        
-        return xr.DataArray(data=group[key][()], dims=dims, coords=coords)
 
     @property
     def metrics(self):
