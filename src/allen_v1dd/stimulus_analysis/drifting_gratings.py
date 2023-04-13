@@ -123,7 +123,7 @@ class DriftingGratings(StimulusAnalysis):
 
         # Preferred condition
         pref_cond = np.full_like(self.pref_cond_index, np.nan) # 2 = pref direction, SF
-        for roi in len(pref_cond):
+        for roi in range(len(pref_cond)):
             pref_dir_idx, pref_sf_idx = pref_cond[roi]
             if pref_dir_idx > 0 and pref_sf_idx > 0:
                 pref_cond[roi] = [self.dir_list[pref_dir_idx], self.sf_list[pref_sf_idx]]
