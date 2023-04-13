@@ -29,6 +29,7 @@ class StimulusAnalysis(object):
         group.attrs["stim_name"] = self.stim_name
         group.attrs["stim_abbrev"] = self.stim_abbrev
         group.attrs["authors"] = self.authors
+        group.attrs["trace_type"] = self.trace_type
 
         # This method is to be overridden and called in subclasses
 

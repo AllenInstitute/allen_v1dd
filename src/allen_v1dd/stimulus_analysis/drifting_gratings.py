@@ -87,11 +87,11 @@ class DriftingGratings(StimulusAnalysis):
         self._null_dist_single_trial = None
         self._tuning_fit_params = None
         self._tuning_fit_metrics = None
+        self._pref_cond_index = None
 
     def save_to_h5(self, group):
         super().save_to_h5(group)
 
-        group.attrs["trace_type"] = self.trace_type
         group.attrs["frac_sig_trials_thresh"] = self.frac_responsive_trials_thresh
         group.attrs["contrast"] = self.contrast
         group.attrs["directions"] = self.dir_list
@@ -116,23 +116,20 @@ class DriftingGratings(StimulusAnalysis):
         ds.attrs["inclusion_criteria"] = f"frac_responsive_trials >= {self.frac_responsive_trials_thresh}"
         group.create_dataset("frac_responsive_trials", data=metrics.frac_responsive_trials.values.astype(float))
 
+        # Preferred condition index
+        ds = group.create_dataset("pref_cond_index", data=self.pref_cond_index)
+        ds.attrs["dimensions"] = ["roi", "pref_cond_idx"]
+        ds.attrs["notes"] = "Dimension 1 (pref_cond_idx) contains [pref_dir_idx, pref_sf_idx]"
+
         # Preferred condition
-        pref_cond = np.full((self.n_rois, 2), np.nan)
-        for roi in range(self.n_rois):
-            if is_responsive[roi]:
-                pref_cond[roi] = [metrics.at[roi, "pref_dir"], metrics.at[roi, "pref_sf"]]
+        pref_cond = np.full_like(self.pref_cond_index, np.nan) # 2 = pref direction, SF
+        for roi in len(pref_cond):
+            pref_dir_idx, pref_sf_idx = pref_cond[roi]
+            if pref_dir_idx > 0 and pref_sf_idx > 0:
+                pref_cond[roi] = [self.dir_list[pref_dir_idx], self.sf_list[pref_sf_idx]]
         ds = group.create_dataset("pref_cond", data=pref_cond)
         ds.attrs["dimensions"] = ["roi", "pref_cond"]
         ds.attrs["notes"] = "Dimension 1 (pref_cond) contains [pref_dir, pref_sf]"
-
-        # Preferred condition index
-        pref_cond_index = np.full((self.n_rois, 2), -1, dtype=int)
-        for roi in range(self.n_rois):
-            if is_responsive[roi]:
-                pref_cond_index[roi] = [metrics.at[roi, "pref_dir_idx"], metrics.at[roi, "pref_sf_idx"]]
-        ds = group.create_dataset("pref_cond_index", data=pref_cond_index)
-        ds.attrs["dimensions"] = ["roi", "pref_cond_idx"]
-        ds.attrs["notes"] = "Dimension 1 (pref_cond) contains [pref_dir_idx, pref_sf_idx]"
 
         # Trial running speeds
         trial_running_speeds = self.trial_running_speeds
@@ -142,8 +139,8 @@ class DriftingGratings(StimulusAnalysis):
         # Various other metrics
         # DSI, OSI, gOSI
         group.create_dataset("dsi", data=self.metrics.dsi.values.astype(float))
-        group.create_dataset("osi", data=self.metrics.dsi.values.astype(float))
-        group.create_dataset("gosi", data=self.metrics.dsi.values.astype(float))
+        group.create_dataset("osi", data=self.metrics.osi.values.astype(float))
+        group.create_dataset("gosi", data=self.metrics.gosi.values.astype(float))
         
         group.create_dataset("pref_dir_mean", data=self.metrics.pref_dir_mean.values.astype(float))
 
@@ -161,7 +158,7 @@ class DriftingGratings(StimulusAnalysis):
                 ds.attrs["dimensions"] = ["roi", "pref_sf_idx", metric]
 
     @staticmethod
-    def compute_ssi_from_h5(plane_group, group_name="ssi"):
+    def compute_ssi_from_h5(session, plane, plane_group, group_name="ssi"):
         def metric_index(a, b):
             if a + b == 0: return np.nan
             return (a - b) / (a + b)
@@ -364,6 +361,21 @@ class DriftingGratings(StimulusAnalysis):
             self._null_dist_multi_trial = self.get_spont_null_dist(self.baseline_time_window, self.response_time_window, n_boot=self.n_null_distribution_boot, n_means=self.n_trials, trace_type=self.trace_type, cache=True)
 
         return self._null_dist_multi_trial
+
+    @property
+    def pref_cond_index(self):
+        if self._pref_cond_index is None:
+            dg_mean_trial_resp = self.trial_responses.mean(dim="trial", skipna=True) # Trial-mean responses for each ROI
+            argmax_dims = ("direction", "spatial_frequency")
+            argmax_dict = dg_mean_trial_resp.fillna(-1).argmax(dim=argmax_dims) # { dim: array of argmax for each ROI }
+            self._pref_cond_index = np.full((self.n_rois, 2), -1, dtype=int)
+            
+            for roi in range(self.n_rois):
+                if self.is_roi_valid[roi]:
+                    self._pref_cond_index[roi] = [argmax_dict[d][roi] for d in argmax_dims]
+        
+        return self._pref_cond_index
+
 
     def get_stim_idx(self, dir, sf):
         if dir is None and sf is None:

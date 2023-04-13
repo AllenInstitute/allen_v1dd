@@ -9,6 +9,7 @@ import h5py
 
 from allen_v1dd.client import OPhysClient, OPhysSession
 from allen_v1dd.stimulus_analysis import *
+from allen_v1dd.stimulus_analysis.running_correlation import save_roi_running_correlations
 from allen_v1dd.parallel_process import ParallelProcess
 from allen_v1dd.duplicate_rois import get_duplicate_roi_pairs_in_session, get_unique_duplicate_rois
 
@@ -117,15 +118,17 @@ class RunStimulusAnalysis(ParallelProcess):
         }
 
         # Load duplicate ROIs
-        debug("Loading duplicate ROIs")
-        duplicate_roi_pairs = get_duplicate_roi_pairs_in_session(session)
-        duplicate_rois = get_unique_duplicate_rois(duplicate_roi_pairs)
+        should_check_dups = len(planes_to_load) > 1
         is_ignored_duplicate = set() # (plane, roi)
-        for dup in duplicate_rois:
-            for plane_and_roi in dup["plane_and_roi"]:
-                for i in range(len(plane_and_roi)):
-                    if i == dup["best_roi_index"]: continue
-                    is_ignored_duplicate.add(plane_and_roi)
+        if should_check_dups:
+            debug("Loading duplicate ROIs")
+            duplicate_roi_pairs = get_duplicate_roi_pairs_in_session(session)
+            duplicate_rois = get_unique_duplicate_rois(duplicate_roi_pairs)
+            for dup in duplicate_rois:
+                for plane_and_roi in dup["plane_and_roi"]:
+                    for i in range(len(plane_and_roi)):
+                        if i == dup["best_roi_index"]: continue
+                        is_ignored_duplicate.add(plane_and_roi)
         
         # Save to file
         with h5py.File(output_file, "w") as file:
@@ -138,7 +141,6 @@ class RunStimulusAnalysis(ParallelProcess):
                 # debug(f"Loading and saving stimulus analyses for plane {plane}")
                 for analysis in stim_analyses:
                     group = plane_group.create_group(analysis.stim_name)
-
                     try:
                         analysis.save_to_h5(group)
                     except:
@@ -190,7 +192,7 @@ class RunStimulusAnalysis(ParallelProcess):
                 # Run additional plane tasks
                 for task in additional_plane_group_tasks:
                     try:
-                        task(plane_group)
+                        task(session, plane, plane_group)
                     except:
                         debug(f"Error while running additional task {task}", force=True)
                         print_exc()
@@ -198,10 +200,11 @@ class RunStimulusAnalysis(ParallelProcess):
             # Duplicate ROI information
             group = session_group.create_group("duplicate_rois")
             all_duplicates = []
-            for dup in duplicate_rois:
-                plane_and_roi = dup["plane_and_roi"]
-                best_idx = dup["best_roi_index"]
-                all_duplicates.append(str([plane_and_roi[best_idx]] + plane_and_roi[:best_idx] + plane_and_roi[best_idx+1:]))
+            if should_check_dups:
+                for dup in duplicate_rois:
+                    plane_and_roi = dup["plane_and_roi"]
+                    best_idx = dup["best_roi_index"]
+                    all_duplicates.append(str([plane_and_roi[best_idx]] + plane_and_roi[:best_idx] + plane_and_roi[best_idx+1:]))
             ds = group.create_dataset("all_duplicates", data=all_duplicates)
             ds.attrs["notes"] = "Row format: [(best_plane, best_roi), (plane2, roi2), ...]"
 
@@ -278,12 +281,16 @@ if __name__ == "__main__":
         (DriftingGratings, dict(dg_type="full", quick_load=test_mode, debug=(debug and test_mode))),
         (DriftingGratings, dict(dg_type="windowed", quick_load=test_mode, debug=(debug and test_mode))),
         (LocallySparseNoise, dict()),
+        (NaturalMovie, dict(compute_chisq=False)), # Chi-sq too slow
+        (NaturalImages, dict(ns_type="natural_images", compute_chisq=False)),
+        (NaturalImages, dict(ns_type="natural_images_12", compute_chisq=False)),
     ]
 
     # Additional tasks to be run after the stimulus analyses
     # Each task is a method with one argument (the plane h5 group)
     additional_plane_group_tasks = [
         DriftingGratings.compute_ssi_from_h5, # Computes SSI metrics from DGW and DGF analyses
+        save_roi_running_correlations,
     ]
 
     # Process all metrics-loading in parallel
