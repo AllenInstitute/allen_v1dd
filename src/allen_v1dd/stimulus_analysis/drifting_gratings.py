@@ -110,11 +110,19 @@ class DriftingGratings(StimulusAnalysis):
 
         metrics = self.metrics
 
+        # Used because sometimes metrics columns don't exist if there are no ROIs
+        def get_met_col(col, default_val=0, dtype=float):
+            if col in metrics.columns:
+                return metrics[col].values.astype(dtype)
+            else:
+                return np.full(len(metrics), default_val, dtype=dtype)
+
         # Is responsive
-        is_responsive = (metrics.is_valid & (metrics.frac_responsive_trials >= self.frac_responsive_trials_thresh)).values.astype(bool)
+        frac_resp = get_met_col("frac_responsive_trials")
+        is_responsive = (metrics.is_valid & (frac_resp >= self.frac_responsive_trials_thresh)).values.astype(bool)
         ds = group.create_dataset("is_responsive", data=is_responsive)
         ds.attrs["inclusion_criteria"] = f"frac_responsive_trials >= {self.frac_responsive_trials_thresh}"
-        group.create_dataset("frac_responsive_trials", data=metrics.frac_responsive_trials.values.astype(float))
+        group.create_dataset("frac_responsive_trials", data=frac_resp)
 
         # Preferred condition index
         ds = group.create_dataset("pref_cond_index", data=self.pref_cond_index)
@@ -137,15 +145,8 @@ class DriftingGratings(StimulusAnalysis):
         ds.attrs["dimensions"] = list(trial_running_speeds.dims)
 
         # Various other metrics
-        # DSI, OSI, gOSI
-        group.create_dataset("dsi", data=self.metrics.dsi.values.astype(float))
-        group.create_dataset("osi", data=self.metrics.osi.values.astype(float))
-        group.create_dataset("gosi", data=self.metrics.gosi.values.astype(float))
-        
-        group.create_dataset("pref_dir_mean", data=self.metrics.pref_dir_mean.values.astype(float))
-
-        # Lifetime sparseness
-        ds = group.create_dataset("lifetime_sparseness", data=self.metrics.lifetime_sparseness.values.astype(float))
+        for col in ("dsi", "osi", "gosi", "pref_dir_mean", "lifetime_sparseness"):
+            group.create_dataset(col, data=get_met_col(col, default_val=np.nan, dtype=float))
 
         # Tuning curves
         if self.fit_tuning_curve:

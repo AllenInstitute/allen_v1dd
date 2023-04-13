@@ -270,8 +270,8 @@ if __name__ == "__main__":
 
     # Test mode: Two sessions from two mice (to test merging)
     if test_mode:
-        session_ids = ["M409828_13", "M416296_13"]
-        task_params["test_max_planes"] = 1
+        session_ids = ["M409828_41"]
+        task_params["test_max_planes"] = 2
 
     print(f"Sessions to load ({len(session_ids)}):")
     print(session_ids)
