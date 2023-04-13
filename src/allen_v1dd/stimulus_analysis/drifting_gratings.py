@@ -559,7 +559,7 @@ class DriftingGratings(StimulusAnalysis):
 
         metrics["is_valid"] = self.is_roi_valid # ~metrics.isna().any(axis=1)
 
-        if len(metrics) > 0:
+        if "pref_dir" in metrics.columns:
             metrics["pref_ori"] = np.mod(metrics.pref_dir, 180)
         # metrics["pref_ori_naive"] = np.mod(metrics.pref_dir_naive, 180)
 
