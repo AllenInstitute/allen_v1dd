@@ -127,6 +127,8 @@ class ParallelProcess():
             n_processes = multiprocessing.cpu_count() + 2
         if self.max_n_processes > 0:
             n_processes = min(n_processes, self.max_n_processes)
+        
+        print(f"Running on {n_processes} threads")
 
         with multiprocessing.Pool(n_processes, initializer=_pool_initializer, maxtasksperchild=3) as pool:
             signal.signal(signal.SIGINT, original_sigint_handler)
