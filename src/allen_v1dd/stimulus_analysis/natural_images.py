@@ -24,7 +24,7 @@ class NaturalImages(StimulusAnalysis):
         
         super().__init__(ns_type, "ni12" if ns_type == "natural_images_12" else "ni", session, plane, trace_type)
 
-        self.author = "David Wyrick, Chase King"
+        self.authors = "David Wyrick, Chase King"
         self.ns_type = ns_type
         self.image_indices = np.array(sorted(self.stim_table["image_index"].dropna().unique()), dtype=int) 
         self.stim_duration = self.stim_meta["duration"] # duration of an individual stimulus (s)
@@ -58,8 +58,9 @@ class NaturalImages(StimulusAnalysis):
         group.attrs["n_chisq_shuffles"] = self.n_chisq_shuffles
 
         # Trial responses
-        ds = group.create_dataset("trial_responses", data=self.trial_responses)
-        ds.attrs["dimensions"] = list(self.trial_responses.dims)
+        mean_image_responses = self.trial_responses.mean(dim="trial", skipna=True)
+        ds = group.create_dataset("mean_image_responses", data=mean_image_responses.values.astype(np.float32))
+        ds.attrs["dimensions"] = list(mean_image_responses)
 
         for col in ("pref_response", "pref_img", "pref_img_idx", "z_score", "frac_responsive_trials", "lifetime_sparseness", "chisq_response_p"):
             if col in self.metrics.columns:

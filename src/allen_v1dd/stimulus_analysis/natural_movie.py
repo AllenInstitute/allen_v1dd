@@ -54,8 +54,9 @@ class NaturalMovie(StimulusAnalysis):
         group.attrs["n_chisq_shuffles"] = self.n_chisq_shuffles
 
         # Trial responses
-        ds = group.create_dataset("trial_responses", data=self.trial_responses)
-        ds.attrs["dimensions"] = list(self.trial_responses.dims)
+        # DO NOT SAVE! THIS ARRAY IS TOO BIG!
+        # ds = group.create_dataset("trial_responses", data=self.trial_responses)
+        # ds.attrs["dimensions"] = list(self.trial_responses.dims)
 
         for col in ("pref_response", "pref_img", "pref_img_idx", "z_score", "frac_responsive_trials", "lifetime_sparseness", "chisq_response_p"):
             if col in self.metrics.columns:

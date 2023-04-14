@@ -35,7 +35,7 @@ class RunStimulusAnalysis(ParallelProcess):
         self.additional_plane_group_tasks = additional_plane_group_tasks
         self.parent_file_path = path.join(self.get_save_dir(), "stimulus_analyses.h5")
         self.task_params = task_params
-        self.max_n_processes = 24 # Michael's machine has 32
+        self.max_n_processes = 30 # Michael's machine has 32
 
     @property
     def test_mode(self):

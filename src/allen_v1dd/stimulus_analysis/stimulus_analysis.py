@@ -15,7 +15,7 @@ class StimulusAnalysis(object):
         self.session = session
         self.plane = plane
         self.trace_type = trace_type
-        self.authors = "Chase King"
+        self.authors = ""
 
         self.stim_table, self.stim_meta = session.get_stimulus_table(stim_name)
         self.is_roi_valid = session.is_roi_valid(plane)
