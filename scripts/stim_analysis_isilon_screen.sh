@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SCREEN_NAME="stim_analysis"
-LOG_FILE="/home/chase/v1dd_stim_analyses_most_recent_log.txt"
+# LOG_FILE="/home/chase/v1dd_stim_analyses_most_recent_log.txt"
 
 echo "Running stimulus analyses on screen \"$SCREEN_NAME\""
 
