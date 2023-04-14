@@ -25,7 +25,7 @@ class NaturalMovie(StimulusAnalysis):
         self.frame_indices = np.array(sorted(self.stim_table["frame"].dropna().unique()), dtype=int) 
         self.stim_duration = 1/30   # duration of an individual stimulus (s)
         self.padding_duration = 0   # padding in between successive stimuli (s)
-        self.n_repeats = 9          # number of movie repeats
+        self.n_repeats = self.stim_table.frame.value_counts().values[0] # Number of movie repeats
         self.sig_p_thresh = 0.05
         self.n_null_distribution_boot = 10000
         self.n_chisq_shuffles = 1000 if compute_chisq else 0
@@ -78,10 +78,10 @@ class NaturalMovie(StimulusAnalysis):
         if self._trial_responses is None:
             data = np.full((self.n_rois, len(self.frame_indices), self.n_repeats), np.nan)
 
-            for frame in self.frame_indices:
-                stim_idx = self.get_stim_idx(frame)
-                frame_data = self.sweep_responses[stim_idx, :].T # shape (n_rois, n_frame_repeats) note n_frame_repeats not necessarily = n_repeats
-                data[:, frame, :frame_data.shape[1]] = frame_data
+            for frame_i in self.frame_indices:
+                stim_idx = self.get_stim_idx(frame_i)
+                frame_data = self.sweep_responses[stim_idx, :].T # shape (n_rois, n_frame_repeats)
+                data[:, frame_i, :] = frame_data
 
             self._trial_responses = xr.DataArray(
                 data=data,
