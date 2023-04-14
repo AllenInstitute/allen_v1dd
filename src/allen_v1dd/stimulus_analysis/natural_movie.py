@@ -49,6 +49,7 @@ class NaturalMovie(StimulusAnalysis):
     def save_to_h5(self, group):
         super().save_to_h5(group)
 
+        group.attrs["n_frames"] = len(self.frame_indices)
         group.attrs["n_repeats"] = self.n_repeats
         group.attrs["frame_rate"] = 30
         group.attrs["n_chisq_shuffles"] = self.n_chisq_shuffles
