@@ -60,7 +60,7 @@ class NaturalImages(StimulusAnalysis):
         # Trial responses
         mean_image_responses = self.trial_responses.mean(dim="trial", skipna=True)
         ds = group.create_dataset("mean_image_responses", data=mean_image_responses.values.astype(np.float32))
-        ds.attrs["dimensions"] = list(mean_image_responses)
+        ds.attrs["dimensions"] = list(mean_image_responses.dims)
 
         for col in ("pref_response", "pref_img", "pref_img_idx", "z_score", "frac_responsive_trials", "lifetime_sparseness", "chisq_response_p"):
             if col in self.metrics.columns:
