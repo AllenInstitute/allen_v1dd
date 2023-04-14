@@ -26,6 +26,7 @@ class ParallelProcess():
         else:
             self.save_dir = None
 
+        self.max_n_processes = -1
 
     def get_save_dir(self):
         return self.save_dir
@@ -124,6 +125,8 @@ class ParallelProcess():
         queue = manager.Queue()
         if n_processes is None:
             n_processes = multiprocessing.cpu_count() + 2
+        if self.max_n_processes > 0:
+            n_processes = min(n_processes, self.max_n_processes)
 
         with multiprocessing.Pool(n_processes, initializer=_pool_initializer, maxtasksperchild=3) as pool:
             signal.signal(signal.SIGINT, original_sigint_handler)
@@ -146,6 +149,7 @@ class ParallelProcess():
                 pool.join()
                 # self.queue.close()
                 # self.queue.join_thread()
+                pool.close()
                 sys.exit(0)
                 return
             except Exception:

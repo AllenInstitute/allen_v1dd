@@ -103,19 +103,11 @@ class RunStimulusAnalysis(ParallelProcess):
         session = client.load_ophys_session(session_id)
         session_group_path = session_id.split("_")
 
-        # Load all stimulus analyses objects
-        debug("Loading stimulus analysis objects")
-        test_max_planes = self.task_params.get("test_max_planes", -1)
+        # Load planes
         planes_to_load = session.get_planes()
+        test_max_planes = self.task_params.get("test_max_planes", -1)
         if self.test_mode and test_max_planes > 0:
             planes_to_load = planes_to_load[-test_max_planes:]
-        stim_analyses_by_plane = {
-            plane: [
-                SA(session, plane, **kwargs)
-                for SA, kwargs in stim_analysis_classes
-            ]
-            for plane in planes_to_load
-        }
 
         # Load duplicate ROIs
         should_check_dups = len(planes_to_load) > 1
@@ -134,18 +126,20 @@ class RunStimulusAnalysis(ParallelProcess):
         with h5py.File(output_file, "w") as file:
             session_group = get_h5_group(file, session_group_path)
 
-            for plane, stim_analyses in stim_analyses_by_plane.items():
+            for plane in planes_to_load:
                 plane_group = session_group.create_group(f"Plane_{plane}")
 
-                # Save the stimulus analysis information
-                # debug(f"Loading and saving stimulus analyses for plane {plane}")
-                for analysis in stim_analyses:
-                    group = plane_group.create_group(analysis.stim_name)
+                # Load and save stim analyses
+                debug(f"Loading and saving stimulus analyses for plane {plane}")
+                for SA, sa_kwargs in stim_analysis_classes:
+                    analysis = SA(session, plane, **sa_kwargs)
+                    analysis_group = plane_group.create_group(analysis.stim_name)
                     try:
-                        analysis.save_to_h5(group)
+                        analysis.save_to_h5(analysis_group)
                     except:
                         debug(f"Error while saving {analysis.stim_name} analyses in {session_id}, plane {plane}:", force=True)
                         print_exc()
+                    del analysis # memory thing; maybe not necessary
 
                 # Save general plane information
                 plane_group.attrs["session_id"] = session.session_id
@@ -155,7 +149,8 @@ class RunStimulusAnalysis(ParallelProcess):
                 plane_group.attrs["plane"] = plane
                 plane_group.attrs["plane_depth_microns"] = session.get_plane_depth(plane)
                 plane_group.attrs["date_created"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                is_roi_valid = session.is_roi_valid(plane)
+                pika_threshold = 0.5
+                is_roi_valid = session.is_roi_valid(plane, conf=pika_threshold)
                 n_rois = len(is_roi_valid)
                 plane_group.attrs["n_rois"] = n_rois
                 plane_group.attrs["n_rois_valid"] = np.count_nonzero(is_roi_valid)
@@ -163,7 +158,7 @@ class RunStimulusAnalysis(ParallelProcess):
                 # Is ROI valid
                 ds = plane_group.create_dataset("is_roi_valid", data=is_roi_valid)
                 ds.attrs["dimensions"] = ["roi"]
-                ds.attrs["pika_threshold"] = 0.5
+                ds.attrs["pika_threshold"] = pika_threshold
 
                 # Pika ROI score
                 ds = plane_group.create_dataset("pika_roi_score", data=session.get_pika_roi_confidence(plane))
@@ -208,6 +203,7 @@ class RunStimulusAnalysis(ParallelProcess):
             ds = group.create_dataset("all_duplicates", data=all_duplicates)
             ds.attrs["notes"] = "Row format: [(best_plane, best_roi), (plane2, roi2), ...]"
 
+        del session
         debug("Done")
 
         return output_file, session_group_path
