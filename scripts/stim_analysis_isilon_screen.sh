@@ -12,6 +12,6 @@ screen -dmS $SCREEN_NAME bash -c "./stim_analysis_isilon.sh; exec bash"
 
 echo
 echo "  ENTER SCREEN:  screen -r $SCREEN_NAME"
-echo "  SYNC LOCALLY:  rsync -av --progress allen:/home/chase/v1dd_stim_analyses_DATE ~/Desktop/"
+echo "  SYNC LOCALLY:  rsync -av --progress allen:/mnt/drive2/chase/v1dd/v1dd_stim_analyses_DATE ~/Desktop/"
 # echo "  less $LOG_FILE                  to view log file"
 echo
