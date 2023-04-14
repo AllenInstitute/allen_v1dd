@@ -80,15 +80,8 @@ class NaturalImages(StimulusAnalysis):
     @property
     def trial_responses(self):
         if self._trial_responses is None:
-            data = np.full((self.n_rois, len(self.image_indices), self.n_trials), np.nan)
-
-            for image in self.image_indices:
-                stim_idx = self.get_stim_idx(image)
-                image_data = self.sweep_responses[stim_idx, :].T # shape (n_rois, n_frame_repeats) note n_frame_repeats not necessarily = n_repeats
-                data[:, image, :image_data.shape[1]] = image_data
-
             self._trial_responses = xr.DataArray(
-                data=data,
+                data=np.nan,
                 name="trial_responses",
                 dims=("roi", "image", "trial"),
                 coords=dict(
@@ -97,6 +90,13 @@ class NaturalImages(StimulusAnalysis):
                     trial=range(self.n_trials)
                 )
             )
+
+            for image in self.image_indices:
+                stim_idx = self.get_stim_idx(image)
+                image_data = self.sweep_responses[stim_idx, :].T # shape (n_rois, n_frame_trials); note n_frame_trials not necessarily = n_trials
+                self._trial_responses.loc[dict(image=image, trial=range(image_data.shape[1]))] = image_data
+                # [:, image, :image_data.shape[1]] = image_data
+
 
         return self._trial_responses
     
