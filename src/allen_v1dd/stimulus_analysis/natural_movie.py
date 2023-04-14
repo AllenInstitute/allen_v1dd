@@ -75,8 +75,15 @@ class NaturalMovie(StimulusAnalysis):
     @property
     def trial_responses(self):
         if self._trial_responses is None:
+            data = np.full((self.n_rois, len(self.frame_indices), self.n_repeats), np.nan)
+
+            for frame in self.frame_indices:
+                stim_idx = self.get_stim_idx(frame)
+                frame_data = self.sweep_responses[stim_idx, :].T # shape (n_rois, n_frame_repeats) note n_frame_repeats not necessarily = n_repeats
+                data[:, frame, :frame_data.shape[1]] = frame_data
+
             self._trial_responses = xr.DataArray(
-                data=np.nan,
+                data=data,
                 name="trial_responses",
                 dims=("roi", "frame", "repeat"),
                 coords=dict(
@@ -86,11 +93,6 @@ class NaturalMovie(StimulusAnalysis):
                 )
             )
 
-            for imgID in self.frame_indices:
-                stim_idx = self.get_stim_idx(imgID)
-                self._trial_responses.loc[
-                    dict(frame=imgID, repeat=range(len(stim_idx)))
-                ] = self.sweep_responses[stim_idx, :].T # shape (n_rois, len(stim_idx))
         return self._trial_responses
 
     @property
@@ -107,7 +109,7 @@ class NaturalMovie(StimulusAnalysis):
         return self._null_dist_multi_trial
 
     def get_stim_idx(self, imgID):
-        return self.stim_table.index[(self.stim_table["frame"] == imgID)]
+        return self.stim_table.index[self.stim_table["frame"] == imgID]
 
     def _load_metrics(self):
         all_metrics = []

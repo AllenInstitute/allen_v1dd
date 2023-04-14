@@ -33,6 +33,14 @@ def set_analysis_file(filename):
     ANALYSIS_PARAMS.clear()
     ANALYSIS_PARAMS["stim_analysis_filename"] = filename
 
+def load_analysis_file(filename: str=None):
+    if filename is None:
+        filename = ANALYSIS_PARAMS.get("stim_analysis_filename")
+    if filename is None:
+        raise ValueError("No stimulus analysis file given. Set one using the set_analysis_file method or the filename argument.")
+    
+    return h5py.File(filename, "r")
+
 def set_included_mice(mice_ids=None):
     ANALYSIS_PARAMS["included_mice"] = mice_ids
 
@@ -57,17 +65,12 @@ def iter_plane_groups(filename: str=None):
     Yields:
         h5 group: All plane groups in analysis file
     """
-    if filename is None:
-        filename = ANALYSIS_PARAMS.get("stim_analysis_filename")
-    if filename is None:
-        raise ValueError("No stimulus analysis file given. Set one using the set_analysis_file method or the filename argument.")
-
     mice = ANALYSIS_PARAMS.get("included_mice")
     cols = ANALYSIS_PARAMS.get("included_columns")
     vols = ANALYSIS_PARAMS.get("included_volumes")
     planes = ANALYSIS_PARAMS.get("included_planes")
 
-    with h5py.File(filename, "r") as file:
+    with load_analysis_file(filename) as file:
         for mouse in file.keys():
             for colvol in file[mouse].keys():
                 plane_keys = file[mouse][colvol].keys()

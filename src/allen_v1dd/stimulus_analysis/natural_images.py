@@ -80,8 +80,15 @@ class NaturalImages(StimulusAnalysis):
     @property
     def trial_responses(self):
         if self._trial_responses is None:
+            data = np.full((self.n_rois, len(self.image_indices), self.n_trials), np.nan)
+
+            for image in self.image_indices:
+                stim_idx = self.get_stim_idx(image)
+                image_data = self.sweep_responses[stim_idx, :].T # shape (n_rois, n_frame_repeats) note n_frame_repeats not necessarily = n_repeats
+                data[:, image, :image_data.shape[1]] = image_data
+
             self._trial_responses = xr.DataArray(
-                data=np.nan,
+                data=data,
                 name="trial_responses",
                 dims=("roi", "image", "trial"),
                 coords=dict(
@@ -91,11 +98,6 @@ class NaturalImages(StimulusAnalysis):
                 )
             )
 
-            for imgID in self.image_indices:
-                stim_idx = self.get_stim_idx(imgID)
-                self._trial_responses.loc[
-                    dict(image=imgID, trial=range(len(stim_idx)))
-                ] = self.sweep_responses[stim_idx, :].T # shape (n_rois, len(stim_idx))
         return self._trial_responses
     
     @property
@@ -119,7 +121,7 @@ class NaturalImages(StimulusAnalysis):
         return self._null_dist_multi_trial
 
     def get_stim_idx(self, imgID):
-        return self.stim_table.index[(self.stim_table["image_index"] == imgID)]
+        return self.stim_table.index[self.stim_table["image_index"] == imgID]
 
     def _load_metrics(self):
         all_metrics = []
