@@ -82,7 +82,7 @@ class NaturalMovie(StimulusAnalysis):
             for frame_i in self.frame_indices:
                 stim_idx = self.get_stim_idx(frame_i)
                 frame_data = self.sweep_responses[stim_idx, :].T # shape (n_rois, n_frame_repeats)
-                data[:, frame_i, :] = frame_data
+                data[:, frame_i, :frame_data.shape[1]] = frame_data
 
             self._trial_responses = xr.DataArray(
                 data=data,
