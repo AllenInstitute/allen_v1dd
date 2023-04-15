@@ -207,6 +207,9 @@ class DriftingGratings(StimulusAnalysis):
         for roi in valid_rois:
             pref_dir_idx, pref_sf_idx = dgw_pref_cond_idxs[roi]
 
+            if pref_dir_idx == -1 or pref_sf_idx == -1:
+                continue
+
             # Normal computation
             pref_dgw_resp = nanmean(dgw_trial_responses[roi, pref_dir_idx, pref_sf_idx])
             dgf_resp_pref_dgw = nanmean(dgf_trial_responses[roi, pref_dir_idx, pref_sf_idx])
