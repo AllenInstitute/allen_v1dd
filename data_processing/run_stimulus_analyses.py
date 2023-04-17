@@ -250,25 +250,29 @@ if __name__ == "__main__":
     debug = args.debug
     task_params = {
         "debug": debug,
-        "test": test_mode
+        "test": test_mode,
+        "test_mode_max_sessions": 1
     }
 
     client = OPhysClient(base_folder)
 
     # Load sessions
     session_ids = client.get_all_session_ids()
-    test_max_sessions = task_params.get("test_mode_max_planes", -1)
+    test_max_sessions = task_params.get("test_mode_max_sessions", -1)
 
     if test_mode and test_max_sessions > 0 and len(session_ids) >= test_max_sessions:
         session_ids = session_ids[:test_max_sessions]
+
+    # Force session 13 if chase local and test
+    if test_mode and test_max_sessions == 1 and args.data_dir == "chase_local":
+        session_ids = ["M409828_13"]
 
     # Test mode: Only M409828 column 1
     # if test_mode: session_ids = [sid for sid in session_ids if sid.startswith("M409828_1")]
 
     # Test mode: Two sessions from two mice (to test merging)
     if test_mode:
-        session_ids = ["M409828_41"]
-        task_params["test_max_planes"] = 2
+        task_params["test_max_planes"] = 1
 
     print(f"Sessions to load ({len(session_ids)}):")
     print(session_ids)

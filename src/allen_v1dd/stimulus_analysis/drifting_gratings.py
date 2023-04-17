@@ -130,11 +130,12 @@ class DriftingGratings(StimulusAnalysis):
         ds.attrs["notes"] = "Dimension 1 (pref_cond_idx) contains [pref_dir_idx, pref_sf_idx]"
 
         # Preferred condition
-        pref_cond = np.full_like(self.pref_cond_index, np.nan) # 2 = pref direction, SF
-        for roi in range(len(pref_cond)):
-            pref_dir_idx, pref_sf_idx = pref_cond[roi]
-            if pref_dir_idx > 0 and pref_sf_idx > 0:
-                pref_cond[roi] = [self.dir_list[pref_dir_idx], self.sf_list[pref_sf_idx]]
+        pref_cond = np.full_like(self.pref_cond_index, np.nan, dtype=float)
+        for roi in range(self.n_rois):
+            pref_dir_idx, pref_sf_idx = self.pref_cond_index[roi]
+            if pref_dir_idx >= 0 and pref_sf_idx >= 0:
+                pref_cond[roi, 0] = self.dir_list[pref_dir_idx]
+                pref_cond[roi, 1] = self.sf_list[pref_sf_idx]
         ds = group.create_dataset("pref_cond", data=pref_cond)
         ds.attrs["dimensions"] = ["roi", "pref_cond"]
         ds.attrs["notes"] = "Dimension 1 (pref_cond) contains [pref_dir, pref_sf]"
