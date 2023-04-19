@@ -11,6 +11,7 @@
 
 **Available at:** `/allen/programs/mindscope/workgroups/surround/v1dd_in_vivo_new_segmentation/data/stimulus_analyses/stimulus_analyses_v1.h5` (4.27 GB)
 
+- **(!!!) Plane IDs now start at 0 instead of 1!** This it to resolve consistency with session NWB files.
 - Fixes bug where DG `osi` and `gosi` metrics are copies of `dsi`.
 - `running_modulation` added (1d array for running modulation for each ROI).
 - DG `pref_cond` and `pref_cond_index` now populated for all valid ROIs (previously was only responsive ROIs).

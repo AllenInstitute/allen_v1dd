@@ -258,11 +258,12 @@ class DriftingGratings(StimulusAnalysis):
             k = "tuning_curve_params"
             if k in dgw.keys() and k in dgf.keys():
                 dgw_params = dgw[k][roi, pref_sf_idx]
-                dgf_params = dgw[k][roi, pref_sf_idx]
+                dgf_params = dgf[k][roi, pref_sf_idx]
 
-                if not np.any(np.isna(dgw_params, dgf_params)):
-                    tuning_pref_dir, w = vonmises_two_peak_get_pref_dir_and_amplitude(dgw_params)
-                    f = vonmises_two_peak_get_amplitude(tuning_pref_dir, dgf_params)
+                if not np.any(np.isnan(dgw_params) | np.isnan(dgf_params)):
+                    tuning_pref_dir, _ = vonmises_two_peak_get_pref_dir_and_amplitude(dgw_params)
+                    w = vonmises_two_peak(tuning_pref_dir, *dgw_params)
+                    f = vonmises_two_peak(tuning_pref_dir, *dgf_params)
                     metrics["ssi_tuning_fit"] = metric_index(w, f)
         
         # Save to an h5 group
