@@ -113,9 +113,12 @@ class EMClient:
             # Assume position is already in nm
             pass
         
-
         if type(position) is pd.Series:
-            transformed_position = pd.Series(index=position.index, data=list(self._transform_nm_to_microns.column_apply(position, return_array=True)))
+            if len(position) == 0:
+                data = []
+            else:
+                data = list(self._transform_nm_to_microns.column_apply(position, return_array=True))
+            transformed_position = pd.Series(index=position.index, data=data)
         else:
             transformed_position = self._transform_nm_to_microns.apply(position) # nm -> transformed microns
             transformed_position = transformed_position.reshape(position.shape) # Maintain original shape
@@ -124,7 +127,8 @@ class EMClient:
 
     
     def df_position_to_microns(self, df, position_column, new_position_column=None):
-        df[new_position_column] = df[position_column].apply(lambda pos: self.transform_position_to_microns(pos, df=df))
+        # df[new_position_column] = df[position_column].apply(lambda pos: self.transform_position_to_microns(pos, df=df))
+        df[new_position_column] = self.transform_position_to_microns(df[position_column])
 
 
     def get_single_soma_position(self, pt_root_id, units="voxels", ignore_multi=False, return_voxel_resolution=False):
@@ -215,6 +219,9 @@ class EMClient:
             for position_column, new_position_column in microns_position_mappings.items():
                 self.df_position_to_microns(synapses, position_column, new_position_column)
         
+        for col in ("pre_pt_position", "post_pt_position"):
+            self.df_position_to_microns(synapses, col, f"{col}_microns")
+        
         if soma_position_mappings is not None:
             # Find unique pt_root_ids that we need for the soma position mapping
             unique_pt_root_ids = set()
@@ -232,15 +239,19 @@ class EMClient:
                 synapses[f"{new_position_column}_voxels"] = synapses[pt_root_id_col].apply(lambda pt_root_id: soma_positions_voxels.get(pt_root_id, None))
                 synapses[f"{new_position_column}_microns"] = synapses[pt_root_id_col].apply(lambda pt_root_id: soma_positions_microns.get(pt_root_id, None))
 
-            synapses["soma_soma_dist_horiz"] = synapses.apply(
+            soma_soma_horiz_dist = [] if len(synapses) == 0 else synapses.apply(
                 lambda row: np.linalg.norm(row["pre_soma_position_microns"][::2] - row["post_soma_position_microns"][::2])
                 if row["pre_soma_position_microns"] is not None and row["post_soma_position_microns"] is not None
-                else np.inf, axis=1)
+                else np.nan, axis=1
+            )
+            synapses["soma_soma_dist_horiz"] = soma_soma_horiz_dist
 
-            synapses["soma_soma_dist"] = synapses.apply(
+            soma_soma_dist = [] if len(synapses) == 0 else synapses.apply(
                 lambda row: np.linalg.norm(row["pre_soma_position_microns"] - row["post_soma_position_microns"])
                 if row["pre_soma_position_microns"] is not None and row["post_soma_position_microns"] is not None
-                else np.inf, axis=1)
+                else np.nan, axis=1
+            )
+            synapses["soma_soma_dist"] = soma_soma_dist
 
         return synapses
 
@@ -335,12 +346,13 @@ class EMClient:
 
 
     def get_coregistration_table(self, drop_duplicates=True, include_proofreading=True):
-        coreg_table = self.query_table("manual_pilot_functional_coregistration_v1")
+        # coreg_table = self.query_table("manual_pilot_functional_coregistration_v1")
+        coreg_table = self.query_table("coregistration_landmarks")
         coreg_table["ophys_mouse"] = 409828
         coreg_table["ophys_column"] = coreg_table.session
         coreg_table["ophys_volume"] = coreg_table.scan_idx
         coreg_table["ophys_session_id"] = coreg_table.apply(lambda row: f"M409828_{row.session}{row.scan_idx}", axis=1)
-        coreg_table["ophys_plane"] = coreg_table.field + 1
+        coreg_table["ophys_plane"] = coreg_table.field # + 1 # ONLY for manual_pilot_functional_coregistration_v1
         coreg_table["ophys_roi"] = coreg_table.unit_id
         coreg_table["roi"] = coreg_table.apply(lambda row: f"{row.ophys_session_id}_{row.ophys_plane}_{row.ophys_roi}", axis=1)
         
@@ -520,7 +532,10 @@ class EMClient:
             else:
                 ax.scatter(syn_pts[:, 0], syn_pts[:, 1], s=syn_size, color="turquoise", alpha=syn_alpha)
 
-    
+    def get_neuroglancer_link():
+        return ""
+
+
     # def dist_on_path(path_positions):
     #     dist = 0
     #     for i in range(len(path_positions) - 1):
