@@ -265,7 +265,7 @@ class DriftingGratings(StimulusAnalysis):
                     tuning_pref_dir, _ = vonmises_two_peak_get_pref_dir_and_amplitude(dgw_params)
                     w = vonmises_two_peak(tuning_pref_dir, *dgw_params)
                     f = vonmises_two_peak(tuning_pref_dir, *dgf_params)
-                    metrics["ssi_tuning_fit"] = metric_index(w, f)
+                    metrics["ssi_tuning_fit"][roi] = metric_index(w, f)
         
         # Save to an h5 group
         ssi_group = plane_group.create_group(group_name)
