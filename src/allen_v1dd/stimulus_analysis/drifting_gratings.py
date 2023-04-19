@@ -194,6 +194,7 @@ class DriftingGratings(StimulusAnalysis):
             "ssi_stationary_avg_at_pref_sf": "Computed from average DGW and DGF responses while mouse is stationary (<1 cm/s) (across direction at preferred DGW spatial freq.)",
             "ssi_running": "Same as SSI, but while mouse is running (>1 cm/s). Must have at least 3 running trials in DGW and DGF.",
             "ssi_stationary": "Same as SSI, but while mouse is stationary (<1 cm/s). Must have at least 3 stationary trials in DGW and DGF.",
+            "ssi_tuning_fit": "Computed from tuning curve fits. Uses DGW pref sf and corresponding tuning fit pref. dir. Then uses DGF tuning fit at that pref sf and dir."
         }
 
         metrics = {
