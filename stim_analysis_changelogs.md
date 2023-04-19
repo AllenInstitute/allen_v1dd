@@ -1,4 +1,11 @@
 # Stimulus analysis changelogs
+<!-- ## `v2`
+**Released:** TBD
+
+**Available at:** TBD
+
+- Natural image and natural movie preferred condition indices are stored as integer arrays with nan values as -1 (previously float arrays with nan values) -->
+
 ## `v1`
 **Released:** Wednesday, April 19, 2023
 

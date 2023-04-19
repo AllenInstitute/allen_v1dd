@@ -62,9 +62,21 @@ class NaturalImages(StimulusAnalysis):
         ds = group.create_dataset("mean_image_responses", data=mean_image_responses.values.astype(np.float32))
         ds.attrs["dimensions"] = list(mean_image_responses.dims)
 
-        for col in ("pref_response", "pref_img", "pref_img_idx", "z_score", "frac_responsive_trials", "lifetime_sparseness", "chisq_response_p"):
+        for col, dtype in dict(
+            pref_response=float,
+            pref_img=int,
+            pref_img_idx=int,
+            z_score=float,
+            frac_responsive_trials=float,
+            lifetime_sparseness=float,
+            chisq_response_p=float,
+        ).items():
             if col in self.metrics.columns:
-                group.create_dataset(col, data=self.metrics[col].values.astype(float))
+                data = self.metrics[col]
+                if dtype is int:
+                    data = data.fillna(-1)
+                data = data.values.astype(dtype)
+                group.create_dataset(col, data=data)
 
 
     @property
