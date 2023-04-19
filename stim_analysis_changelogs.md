@@ -9,7 +9,7 @@
 ## `v1`
 **Released:** Wednesday, April 19, 2023
 
-**Available at:** `/allen/programs/mindscope/workgroups/surround/v1dd_in_vivo_new_segmentation/data/stimulus_analyses/stimulus_analyses_v1.h5`
+**Available at:** `/allen/programs/mindscope/workgroups/surround/v1dd_in_vivo_new_segmentation/data/stimulus_analyses/stimulus_analyses_v1.h5` (4.27 GB)
 
 - Fixes bug where DG `osi` and `gosi` metrics are copies of `dsi`.
 - `running_modulation` added (1d array for running modulation for each ROI).
@@ -20,7 +20,7 @@
 ## `v0`
 **Released:** Friday, April 7, 2023
 
-**Available at:** `/allen/programs/mindscope/workgroups/surround/v1dd_in_vivo_new_segmentation/data/stimulus_analyses/stimulus_analyses_v0.h5`
+**Available at:** `/allen/programs/mindscope/workgroups/surround/v1dd_in_vivo_new_segmentation/data/stimulus_analyses/stimulus_analyses_v0.h5` (3.81 GB)
 
 - First version
 - DG analyses (windowed + full-field)
