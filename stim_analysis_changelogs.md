@@ -17,4 +17,4 @@
 
 - First version
 - DG analyses (windowed + full-field)
-- LSN analyses using basic detection ()
+- LSN analyses (using basic detection; a later version will use chi-squared tests and Gaussian fits)
