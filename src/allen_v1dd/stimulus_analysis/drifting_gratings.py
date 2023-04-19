@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 from .stimulus_analysis import StimulusAnalysis
 from .proba_utils import get_chisq_response_proba
-from .fit_utils import vonmises_two_peak, vonmises_two_peak_fit, vonmises_two_peak_get_pref_dir_and_amplitude, r2_score
+from .fit_utils import vonmises_two_peak, vonmises_two_peak_fit, vonmises_two_peak_get_pref_dir_and_amplitude, r2_score, vonmises_two_peak_get_amplitude
 
 def load_dg_xarray_from_h5(group, key):
     """Loads a drifting grating xarray from an h5 group.
@@ -244,8 +244,6 @@ class DriftingGratings(StimulusAnalysis):
                 w = ws.mean()
                 f = fs.mean()
                 metrics["ssi_stationary"][roi] = metric_index(w, f)
-            else:
-                metrics["ssi_stationary"][roi] = np.nan
             
             wr = np.where(dgw_is_running, dgw_trial_responses, np.nan)[roi, pref_dir_idx, pref_sf_idx]
             fr = np.where(dgf_is_running, dgf_trial_responses, np.nan)[roi, pref_dir_idx, pref_sf_idx]
@@ -255,8 +253,17 @@ class DriftingGratings(StimulusAnalysis):
                 w = wr.mean()
                 f = fr.mean()
                 metrics["ssi_running"][roi] = metric_index(w, f)
-            else:
-                metrics["ssi_running"][roi] = np.nan
+
+            # SSI from tuning curve fits
+            k = "tuning_curve_params"
+            if k in dgw.keys() and k in dgf.keys():
+                dgw_params = dgw[k][roi, pref_sf_idx]
+                dgf_params = dgw[k][roi, pref_sf_idx]
+
+                if not np.any(np.isna(dgw_params, dgf_params)):
+                    tuning_pref_dir, w = vonmises_two_peak_get_pref_dir_and_amplitude(dgw_params)
+                    f = vonmises_two_peak_get_amplitude(tuning_pref_dir, dgf_params)
+                    metrics["ssi_tuning_fit"] = metric_index(w, f)
         
         # Save to an h5 group
         ssi_group = plane_group.create_group(group_name)

@@ -53,8 +53,7 @@ class OPhysSession:
             for key in nwb_file["processing"].keys():
                 if key.startswith("rois_and_traces_plane"):
                     plane_name = key[key.rindex("_")+1:]
-                    plane_internal = int(plane_name[5:]) # Remove the "plane"
-                    plane = self.internal_to_plane(plane_internal)
+                    plane = int(plane_name[5:]) # Remove the "plane"
                     self._planes.append(plane)
 
                     rois = nwb_file[f"{self._rois_and_traces(plane)}/ImageSegmentation/imaging_plane"].keys()
@@ -62,7 +61,7 @@ class OPhysSession:
                     rois.sort()
                     self._plane_rois[plane] = rois
                     self._plane_depths[plane] = nwb_file[f"{self._rois_and_traces(plane)}/imaging_depth_micron"][()]
-                    self._plane_pika_roi_conf[plane] = nwb_file[f"analysis/roi_classification_pika/plane{plane_internal}/score"][()]
+                    self._plane_pika_roi_conf[plane] = nwb_file[f"analysis/roi_classification_pika/plane{plane}/score"][()]
 
 
         # Parse mouse, column, and volume
@@ -157,16 +156,6 @@ class OPhysSession:
         # Save in cache
         self._stim_table_cache[stim_name] = (stim_table, stim_meta)
         return stim_table, stim_meta
-
-    def plane_to_internal(self, plane: int) -> int:
-        # Convert plane to internal plane ID
-        # Planes are interally stored starting at zero
-        return plane - 1
-
-    def internal_to_plane(self, plane_internal: int) -> int:
-        # Convert internal plane ID to plane
-        # Outwardly, planes start at 1
-        return plane_internal + 1
 
     def _check_integrity(self, nwb_file):
         error_list = []
@@ -376,7 +365,7 @@ class OPhysSession:
         return self._planes
 
     def _rois_and_traces(self, plane: int) -> str:
-        return f"processing/rois_and_traces_plane{self.plane_to_internal(plane)}"
+        return f"processing/rois_and_traces_plane{plane}"
 
     def get_lims_experiment_id(self, plane: int) -> str:
         """Get the LIMS experiment ID for an imaging plane.
@@ -566,7 +555,7 @@ class OPhysSession:
                 trace_grp = nwb_file[f'{prefix}/DfOverF/dff_raw']
             elif trace_type == "events":
                 # different for events
-                trace_grp = nwb_file[f'processing/l0_events_plane{self.plane_to_internal(plane)}/DfOverF/l0_events']
+                trace_grp = nwb_file[f'processing/l0_events_plane{plane}/DfOverF/l0_events']
             elif trace_type == "cascade":
                 trace_grp = np.load(f'/home/david.wyrick/projects/V1DD/data/predictions_dff_{self.mouse_id}_{self.column_id}{self.volume_id}_{plane}_all-rois.npz')
             else:

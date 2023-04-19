@@ -35,7 +35,7 @@ class RunStimulusAnalysis(ParallelProcess):
         self.additional_plane_group_tasks = additional_plane_group_tasks
         self.parent_file_path = path.join(self.get_save_dir(), "stimulus_analyses.h5")
         self.task_params = task_params
-        self.max_n_processes = 30 # Michael's machine has 32
+        # self.max_n_processes = 32 # Michael's machine has 32
 
     @property
     def test_mode(self):
@@ -108,7 +108,8 @@ class RunStimulusAnalysis(ParallelProcess):
         planes_to_load = session.get_planes()
         test_max_planes = self.task_params.get("test_max_planes", -1)
         if self.test_mode and test_max_planes > 0:
-            planes_to_load = planes_to_load[-test_max_planes:]
+            # planes_to_load = planes_to_load[-test_max_planes:]
+            planes_to_load = planes_to_load[:test_max_planes]
 
         # Load duplicate ROIs
         should_check_dups = len(planes_to_load) > 1
@@ -272,7 +273,7 @@ if __name__ == "__main__":
 
     # Test mode: Two sessions from two mice (to test merging)
     if test_mode:
-        task_params["test_max_planes"] = 1
+        task_params["test_max_planes"] = 2
 
     print(f"Sessions to load ({len(session_ids)}):")
     print(session_ids)
