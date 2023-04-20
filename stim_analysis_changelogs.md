@@ -7,9 +7,9 @@
 -  -->
 
 ## `v1`
-**Released:** Wednesday, April 19, 2023
+**Released:** Thursday, April 20, 2023
 
-**Available at:** `/allen/programs/mindscope/workgroups/surround/v1dd_in_vivo_new_segmentation/data/stimulus_analyses/stimulus_analyses_v1.h5` (4.27 GB)
+**Available at:** `/allen/programs/mindscope/workgroups/surround/v1dd_in_vivo_new_segmentation/data/stimulus_analyses/stimulus_analyses_v1.h5` (4.28 GB)
 
 - **(!!!) Plane IDs now start at 0 instead of 1!** This it to resolve consistency with session NWB files.
 - Fixes bug where DG `osi` and `gosi` metrics are copies of `dsi`.
