@@ -69,6 +69,7 @@ class DriftingGratings(StimulusAnalysis):
         self.n_null_distribution_boot = 10000
         self.n_chisq_shuffles = 100 if quick_load else 1000
         self.fit_tuning_curve = not quick_load # Whether to fit tuning curves to ROI responses
+        self.si_perm_test_n_shuffles = 100 if quick_load else 10000
         
         if trace_type == "dff":
             self.baseline_time_window = (-3, 0) # Time window used to offset/"demean" the event traces
@@ -158,6 +159,15 @@ class DriftingGratings(StimulusAnalysis):
             for i, metric in enumerate(("pref_direction", "peak_amplitude", "r2")):
                 ds = group.create_dataset(f"tuning_curve_{metric}", data=self.tuning_fit_metrics[:, :, i])
                 ds.attrs["dimensions"] = ["roi", "pref_sf_idx", metric]
+        
+        # OSI and DSI, permutation test
+        if self.si_perm_test_n_shuffles > 0:
+            for met in ("osi", "dsi"):
+                col = f"{met}_perm_test"
+                data = get_met_col([col, f"{col}_p"], default_val=np.nan, dtype=float)
+                ds = group.create_dataset(col, data=data)
+                ds.attrs["dimensions"] = ["roi", f"({met}, p_value)"]
+                ds.attrs["n_snuffles"] = self.si_perm_test_n_shuffles
 
     @staticmethod
     def compute_ssi_from_h5(session, plane, plane_group, group_name="ssi"):
@@ -389,6 +399,61 @@ class DriftingGratings(StimulusAnalysis):
                     self._pref_cond_index[roi] = [argmax_dict[d][roi] for d in argmax_dims]
         
         return self._pref_cond_index
+    
+    def _selectivity_index(self, direction_tuning, metric="dsi"):
+        # direction_tuning.shape = (..., n_directions)
+        orig_shape = np.shape(direction_tuning)
+        n_directions = orig_shape[-1]
+        direction_tuning = np.reshape(direction_tuning, (-1, n_directions))
+        n_tuning = len(direction_tuning)
+        norm = np.sum(direction_tuning, axis=1)
+        valid_mask = norm != 0
+
+        si = np.full(n_tuning, np.nan, dtype=float)
+        
+        angles = np.arange(0, n_directions) / n_directions * 2*np.pi # angle (radians) corresponding to each direction (assume angles uniformly spaced between 0 and 360)
+        if metric == "osi":
+            angles *= 2
+        si[valid_mask] = np.abs(np.dot(direction_tuning[valid_mask], np.exp(1j*angles)) / norm) # | sum R_theta * e^{-i theta} ||
+
+        if len(orig_shape) == 1:
+            si = si[0]
+        else:
+            si = si.reshape(orig_shape[:-1])
+
+        return si
+    
+    def _get_direction_tuning(self, trial_responses):
+        # trial_responses is shape (..., n_directions, n_trials)
+        return np.nanmean(trial_responses, axis=-1)
+        # if svd:
+        #     # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4724341/
+        #     u, s, vh = np.linalg.svd(np.nan_to_num(roi_trial_resp, 0), full_matrices=False) # since we only care about first column of u
+        #     return np.abs(u[:, 0])
+
+    def _si_permutation_test(self, trial_responses, n_shuffles=10000, metric="dsi"):
+        # trial_responses.shape is (..., n_directions, n_trials)
+        # returns: tuple
+        #   - met_true: True metric values
+        #   - p_values: 
+        #       (each of these is shape (...,))
+        shape = trial_responses.shape
+        first_dims = shape[:-2]
+        direction_axis = len(shape) - 2
+        
+        tune_true = self._get_direction_tuning(trial_responses)
+        met_true = self._selectivity_index(tune_true, metric=metric)
+        
+        met_shuffled = np.empty((n_shuffles,) + first_dims, dtype=float)
+        shuffled_trial_responses = np.copy(trial_responses) # copy once and shuffle this array
+
+        for s in range(n_shuffles):
+            np.apply_along_axis(np.random.shuffle, direction_axis, shuffled_trial_responses)
+            tune_shuffled = self._get_direction_tuning(shuffled_trial_responses)
+            met_shuffled[s] = self._selectivity_index(tune_shuffled, metric=metric)
+
+        p = np.mean(met_true < met_shuffled, axis=0)
+        return met_true, p
 
 
     def get_stim_idx(self, dir, sf):
@@ -577,15 +642,33 @@ class DriftingGratings(StimulusAnalysis):
             metrics["pref_ori"] = np.mod(metrics.pref_dir, 180)
         # metrics["pref_ori_naive"] = np.mod(metrics.pref_dir_naive, 180)
 
-
         # Is responsive using chi-squared test
-        metrics["chisq_response_p"] = get_chisq_response_proba(self.stim_table, ["direction", "spatial_frequency"], self.sweep_responses, n_shuffles=self.n_chisq_shuffles)
+        metrics.loc[self.is_roi_valid, "chisq_response_p"] = get_chisq_response_proba(self.stim_table, ["direction", "spatial_frequency"], self.sweep_responses[:, self.is_roi_valid], n_shuffles=self.n_chisq_shuffles)
 
         # Null distribution
         metrics["null_dist_multi_mean"] = null_multi_mean
         metrics["null_dist_multi_std"] = null_multi_std
         metrics["null_dist_single_mean"] = self.null_dist_single_trial.mean(axis=1)
         metrics["null_dist_single_std"] = self.null_dist_single_trial.std(axis=1)
+
+
+
+        # Permutation test
+        if self.si_perm_test_n_shuffles > 0:
+            trial_responses = self.trial_responses.transpose("roi", "spatial_frequency", "direction", "trial").values[self.is_roi_valid]
+            n_rois, n_sf, n_dir, n_trials = trial_responses.shape
+            pref_trial_responses = np.empty(shape=(n_rois, n_dir, n_trials), dtype=float) # @ pref SF
+
+            for roi in range(n_rois):
+                pref_sf_idx = self.pref_cond_index[roi, 1]
+                pref_trial_responses[roi] = trial_responses[roi, pref_sf_idx]
+            
+            for met in ("osi", "dsi"):
+                si, p = self._si_permutation_test(pref_trial_responses, n_shuffles=self.si_perm_test_n_shuffles, metric=met)
+                col = f"{met}_perm_test"
+                metrics.loc[self.is_roi_valid, col] = si
+                metrics.loc[self.is_roi_valid, f"{col}_p"] = p
+
 
         metrics = metrics.convert_dtypes()
         self._metrics = metrics

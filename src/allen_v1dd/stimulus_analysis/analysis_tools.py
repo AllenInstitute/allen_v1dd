@@ -53,11 +53,12 @@ def set_included_volumes(volume_ids=None):
 def set_included_planes(plane_ids=None):
     ANALYSIS_PARAMS["included_planes"] = plane_ids
 
-def iter_plane_groups(filename: str=None):
+def iter_plane_groups(filename: str=None, filter=None):
     """Iterate all plane groups in an h5 analysis file
 
     Args:
         filename (str, optional): Filename for h5 analysis file. Defaults to the filename set using set_analysis_file.
+        filter (dict or None, optional): Filter the plane group attributes. Defaults to None. If filter is set then it ignores the included params that have been set by other methods.
 
     Raises:
         ValueError: If no analysis file is supplied
@@ -77,11 +78,27 @@ def iter_plane_groups(filename: str=None):
                 for plane in plane_keys:
                     plane_group = file[mouse][colvol][plane]
 
-                    if "plane" not in plane_group.attrs: continue # Make sure it is actually a plane                    
-                    if mice is not None and plane_group.attrs["mouse"] not in mice: continue # Ignore mice
-                    if cols is not None and plane_group.attrs["column"] not in cols: continue # Ignore columns
-                    if vols is not None and plane_group.attrs["volume"] not in vols: continue # Ignore volumes
-                    if planes is not None and len(plane_keys) > 1 and plane_group.attrs["plane"] not in planes: continue # Ignore planes
+                    if "plane" not in plane_group.attrs: continue # Make sure it is actually a plane
+
+
+                    if filter is None:
+                        if mice is not None and plane_group.attrs["mouse"] not in mice: continue # Ignore mice
+                        if cols is not None and plane_group.attrs["column"] not in cols: continue # Ignore columns
+                        if vols is not None and plane_group.attrs["volume"] not in vols: continue # Ignore volumes
+                        if planes is not None and len(plane_keys) > 1 and plane_group.attrs["plane"] not in planes: continue # Ignore planes
+                    else:
+                        ignore = False
+                        for k, v in filter.items():
+                            if type(v) is int:
+                                if plane_group.attrs[k] != v:
+                                    ignore = True
+                            else:
+                                if plane.attrs[k] not in v:
+                                    ignore = True
+                        
+                        if ignore:
+                            continue
+                        
 
                     # Quality check: must have >0 valid ROIs
                     # May remove this later...
