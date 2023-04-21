@@ -666,6 +666,8 @@ class DriftingGratings(StimulusAnalysis):
             for met in ("osi", "dsi"):
                 si, p = self._si_permutation_test(pref_trial_responses, n_shuffles=self.si_perm_test_n_shuffles, metric=met)
                 col = f"{met}_perm_test"
+                metrics[col] = np.nan
+                metrics[f"{col}_p"] = np.nan
                 metrics.loc[self.is_roi_valid, col] = si
                 metrics.loc[self.is_roi_valid, f"{col}_p"] = p
 
