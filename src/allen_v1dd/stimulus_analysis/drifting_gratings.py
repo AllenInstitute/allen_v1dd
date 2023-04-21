@@ -113,7 +113,7 @@ class DriftingGratings(StimulusAnalysis):
 
         # Used because sometimes metrics columns don't exist if there are no ROIs
         def get_met_col(col, default_val=0, dtype=float):
-            if col in metrics.columns:
+            if type(col) is list or col in metrics.columns:
                 return metrics[col].values.astype(dtype)
             else:
                 return np.full(len(metrics), default_val, dtype=dtype)
