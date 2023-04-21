@@ -113,10 +113,14 @@ class DriftingGratings(StimulusAnalysis):
 
         # Used because sometimes metrics columns don't exist if there are no ROIs
         def get_met_col(col, default_val=0, dtype=float):
-            if type(col) is list or col in metrics.columns:
-                return metrics[col].values.astype(dtype)
+            if type(col) is str:
+                if col in metrics.columns:
+                    return metrics[col].values.astype(dtype)
             else:
-                return np.full(len(metrics), default_val, dtype=dtype)
+                return metrics[col].values.astype(dtype)
+                # return np.hstack([metrics[c].values.astype(dtype) for c in col]).astype(dtype)
+
+            return np.full(len(metrics), default_val, dtype=dtype)
 
         # Is responsive
         frac_resp = get_met_col("frac_responsive_trials")
@@ -651,8 +655,6 @@ class DriftingGratings(StimulusAnalysis):
         metrics["null_dist_single_mean"] = self.null_dist_single_trial.mean(axis=1)
         metrics["null_dist_single_std"] = self.null_dist_single_trial.std(axis=1)
 
-
-
         # Permutation test
         if self.si_perm_test_n_shuffles > 0:
             trial_responses = self.trial_responses.transpose("roi", "spatial_frequency", "direction", "trial").values[self.is_roi_valid]
@@ -666,13 +668,10 @@ class DriftingGratings(StimulusAnalysis):
             for met in ("osi", "dsi"):
                 si, p = self._si_permutation_test(pref_trial_responses, n_shuffles=self.si_perm_test_n_shuffles, metric=met)
                 col = f"{met}_perm_test"
-                metrics[col] = np.nan
-                metrics[f"{col}_p"] = np.nan
                 metrics.loc[self.is_roi_valid, col] = si
                 metrics.loc[self.is_roi_valid, f"{col}_p"] = p
 
-
-        metrics = metrics.convert_dtypes()
+        # metrics = metrics.convert_dtypes()
         self._metrics = metrics
         # print(" Done.")
 
