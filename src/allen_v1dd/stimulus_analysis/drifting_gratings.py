@@ -657,19 +657,25 @@ class DriftingGratings(StimulusAnalysis):
 
         # Permutation test
         if self.si_perm_test_n_shuffles > 0:
-            trial_responses = self.trial_responses.transpose("roi", "spatial_frequency", "direction", "trial").values[self.is_roi_valid]
+            inclusion = self.is_roi_valid
+            trial_responses = self.trial_responses.transpose("roi", "spatial_frequency", "direction", "trial").values
             n_rois, n_sf, n_dir, n_trials = trial_responses.shape
-            pref_trial_responses = np.empty(shape=(n_rois, n_dir, n_trials), dtype=float) # @ pref SF
+            valid_rois = np.where(inclusion)[0]
+            pref_trial_responses = np.empty(shape=(len(valid_rois), n_dir, n_trials), dtype=float) # @ pref SF
 
-            for roi in range(n_rois):
+            for i, roi in enumerate(valid_rois):
                 pref_sf_idx = self.pref_cond_index[roi, 1]
-                pref_trial_responses[roi] = trial_responses[roi, pref_sf_idx]
+                pref_trial_responses[i] = trial_responses[roi, pref_sf_idx]
             
             for met in ("osi", "dsi"):
-                si, p = self._si_permutation_test(pref_trial_responses, n_shuffles=self.si_perm_test_n_shuffles, metric=met)
                 col = f"{met}_perm_test"
-                metrics.loc[self.is_roi_valid, col] = si
-                metrics.loc[self.is_roi_valid, f"{col}_p"] = p
+                metrics[col] = np.nan
+                metrics[f"{col}_p"] = np.nan
+
+                if len(valid_rois) > 0:
+                    si, p = self._si_permutation_test(pref_trial_responses, n_shuffles=self.si_perm_test_n_shuffles, metric=met)
+                    metrics.loc[inclusion, col] = si
+                    metrics.loc[inclusion, f"{col}_p"] = p
 
         # metrics = metrics.convert_dtypes()
         self._metrics = metrics
