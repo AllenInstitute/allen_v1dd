@@ -33,9 +33,11 @@ class OPhysClient:
         Args:
             database_path (str): Path to physiology database
         """
-        if database_path is None:
+        if database_path is None or database_path == "isilon":
             database_path = path.join("allen", "programs", "mindscope", "workgroups", "surround", "v1dd_in_vivo_new_segmentation", "data")
             print("Defaulting to V1DD data in allen drive:", database_path)
+        elif database_path == "chase":
+            database_path = "/Users/chase/Desktop/test_v1dd_data"
 
         self.database_path = database_path
         self._nwb_files = None

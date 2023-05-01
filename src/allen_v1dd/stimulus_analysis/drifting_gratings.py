@@ -66,7 +66,7 @@ class DriftingGratings(StimulusAnalysis):
         
         self.sig_p_thresh = 0.05
         self.frac_responsive_trials_thresh = 0.5 # Fraction of responses in the preferred direction that must be significant for the ROI to be flagged as responsive
-        self.n_null_distribution_boot = 10000
+        self.n_null_distribution_boot = 2500
         self.n_chisq_shuffles = 100 if quick_load else 1000
         self.fit_tuning_curve = not quick_load # Whether to fit tuning curves to ROI responses
         self.si_perm_test_n_shuffles = 100 if quick_load else 10000

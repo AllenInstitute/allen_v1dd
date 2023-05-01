@@ -352,7 +352,7 @@ class EMClient:
         coreg_table["ophys_column"] = coreg_table.session
         coreg_table["ophys_volume"] = coreg_table.scan_idx
         coreg_table["ophys_session_id"] = coreg_table.apply(lambda row: f"M409828_{row.session}{row.scan_idx}", axis=1)
-        coreg_table["ophys_plane"] = coreg_table.field
+        coreg_table["ophys_plane"] = coreg_table.field - 1
         coreg_table["ophys_roi"] = coreg_table.unit_id
         coreg_table["roi"] = coreg_table.apply(lambda row: f"{row.ophys_session_id}_{row.ophys_plane}_{row.ophys_roi}", axis=1)
         

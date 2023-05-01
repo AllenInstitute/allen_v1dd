@@ -53,8 +53,8 @@ def set_included_volumes(volume_ids=None):
 def set_included_planes(plane_ids=None):
     ANALYSIS_PARAMS["included_planes"] = plane_ids
 
-def iter_plane_groups(filename: str=None, filter=None):
-    """Iterate all plane groups in an h5 analysis file
+def iter_plane_groups(filename: str=None, filter=None, return_session_group=False):
+    """Iterate all plane groups in an h5 analysis file.
 
     Args:
         filename (str, optional): Filename for h5 analysis file. Defaults to the filename set using set_analysis_file.
@@ -74,9 +74,10 @@ def iter_plane_groups(filename: str=None, filter=None):
     with load_analysis_file(filename) as file:
         for mouse in file.keys():
             for colvol in file[mouse].keys():
-                plane_keys = file[mouse][colvol].keys()
+                session_group = file[mouse][colvol]
+                plane_keys = session_group.keys()
                 for plane in plane_keys:
-                    plane_group = file[mouse][colvol][plane]
+                    plane_group = session_group[plane]
 
                     if "plane" not in plane_group.attrs: continue # Make sure it is actually a plane
 
@@ -89,11 +90,11 @@ def iter_plane_groups(filename: str=None, filter=None):
                     else:
                         ignore = False
                         for k, v in filter.items():
-                            if type(v) is int:
-                                if plane_group.attrs[k] != v:
+                            if type(v) in (list, tuple):
+                                if plane_group.attrs[k] not in v:
                                     ignore = True
                             else:
-                                if plane.attrs[k] not in v:
+                                if plane_group.attrs[k] != v:
                                     ignore = True
                         
                         if ignore:
@@ -104,7 +105,10 @@ def iter_plane_groups(filename: str=None, filter=None):
                     # May remove this later...
                     if plane_group.attrs["n_rois_valid"] == 0: continue
 
-                    yield plane_group
+                    if return_session_group:
+                        yield session_group, plane_group
+                    else:
+                        yield plane_group
 
 def load_roi_metrics(metrics_file="../../data_frames/v1dd_metrics.csv", add_columns=True, remove_invalid=True, remove_duplicates=True):
     """Load metrics from the saved CSV file. Default file path is relative so can be accessed from notebooks.

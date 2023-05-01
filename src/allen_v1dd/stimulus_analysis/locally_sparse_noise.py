@@ -73,7 +73,7 @@ class LocallySparseNoise(StimulusAnalysis):
         
         # RF centers
         ds = group.create_dataset("rf_centers", data=self.rf_centers)
-        ds.attrs["dimensions"] = ["roi", "on (0) and off (1)", "altitude (0) and azimuth (1) (deg)"]
+        ds.attrs["dimensions"] = ["roi", "on (0) and off (1)", "azimuth (0) and altitude (1) (deg)"]
 
         # RF centers (computed by argmax)
         rf_centers_argmax = np.full((self.n_rois, 2, 2), np.nan)
@@ -85,7 +85,7 @@ class LocallySparseNoise(StimulusAnalysis):
                 alt, azi = self.point_to_alt_azi(alt_ctr=alt+0.5, azi_ctr=azi+0.5) # Add 0.5 to center in pixel
                 rf_centers_argmax[roi, onoff, :] = (azi, alt)
         ds = group.create_dataset("rf_centers_argmax", data=rf_centers_argmax)
-        ds.attrs["dimensions"] = ["roi", "on (0) and off (1)", "altitude (0) and azimuth (1) (deg)"]
+        ds.attrs["dimensions"] = ["roi", "on (0) and off (1)", "azimuth (0) and altitude (1) (deg)"]
 
         
 

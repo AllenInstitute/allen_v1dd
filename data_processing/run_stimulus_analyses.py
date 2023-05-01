@@ -11,7 +11,7 @@ from allen_v1dd.client import OPhysClient, OPhysSession
 from allen_v1dd.stimulus_analysis import *
 from allen_v1dd.stimulus_analysis.running_correlation import save_roi_running_correlations
 from allen_v1dd.parallel_process import ParallelProcess
-from allen_v1dd.duplicate_rois import get_duplicate_roi_pairs_in_session, get_unique_duplicate_rois
+from allen_v1dd.duplicate_rois import get_duplicate_roi_pairs_in_session, get_unique_duplicate_rois, save_duplicates_to_h5
 
 def get_h5_group(file, group_path):
     curr_group = file
@@ -112,21 +112,30 @@ class RunStimulusAnalysis(ParallelProcess):
             planes_to_load = planes_to_load[:test_max_planes]
 
         # Load duplicate ROIs
+        best_roi_method = "trace_strength"
         should_check_dups = len(planes_to_load) > 1
         is_ignored_duplicate = set() # (plane, roi)
         if should_check_dups:
             debug("Loading duplicate ROIs")
             duplicate_roi_pairs = get_duplicate_roi_pairs_in_session(session)
-            duplicate_rois = get_unique_duplicate_rois(duplicate_roi_pairs)
+            duplicate_rois = get_unique_duplicate_rois(duplicate_roi_pairs, best_roi_method=best_roi_method)
             for dup in duplicate_rois:
                 for plane_and_roi in dup["plane_and_roi"]:
                     for i in range(len(plane_and_roi)):
                         if i == dup["best_roi_index"]: continue
                         is_ignored_duplicate.add(plane_and_roi)
+        else:
+            duplicate_rois = None
         
         # Save to file
         with h5py.File(output_file, "w") as file:
             session_group = get_h5_group(file, session_group_path)
+
+            # Save general session information
+            plane_group.attrs["session_id"] = session.session_id
+            plane_group.attrs["mouse"] = session.mouse_id
+            plane_group.attrs["column"] = session.column_id
+            plane_group.attrs["volume"] = session.volume_id
 
             for plane in planes_to_load:
                 plane_group = session_group.create_group(f"Plane_{plane}")
@@ -195,15 +204,7 @@ class RunStimulusAnalysis(ParallelProcess):
                         print_exc()
 
             # Duplicate ROI information
-            group = session_group.create_group("duplicate_rois")
-            all_duplicates = []
-            if should_check_dups:
-                for dup in duplicate_rois:
-                    plane_and_roi = dup["plane_and_roi"]
-                    best_idx = dup["best_roi_index"]
-                    all_duplicates.append(str([plane_and_roi[best_idx]] + plane_and_roi[:best_idx] + plane_and_roi[best_idx+1:]))
-            ds = group.create_dataset("all_duplicates", data=all_duplicates)
-            ds.attrs["notes"] = "Row format: [(best_plane, best_roi), (plane2, roi2), ...]"
+            save_duplicates_to_h5(session_group, duplicate_rois, group_name="duplicate_rois")
 
         del session
         debug("Done")
