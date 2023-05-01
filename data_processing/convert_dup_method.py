@@ -22,13 +22,12 @@ if __name__ == "__main__":
                     for plane in old_session_group.keys():
                         if plane == "duplicate_rois":
                             dups = parse_duplicates_from_h5(old_session_group)
-                            print(f"Processing {len(dups)} in {mouse}_{cv}")
-                            session = client.load_ophys_session(f"{mouse}_{cv}")
-                            best_roi_method = "trace_strength" if len(dups) == 0 or session is not None else "mask_size"
+                            session_id = f"{mouse}_{cv}"
+                            session = client.load_ophys_session(session_id)
+                            success = len(dups) == 0 or session is not None
+                            best_roi_method = "trace_strength" if success else "mask_size"
 
-                            if len(dups) == 0:
-                                n_success += 1
-                            elif session is not None:
+                            if session is not None and len(dups) > 0:
                                 roi_trace_strengths = {
                                     plane: session.get_traces(plane=plane, trace_type="dff").quantile(trace_strength_quantile, dim="time").values
                                     for plane in session.get_planes()
@@ -36,10 +35,11 @@ if __name__ == "__main__":
 
                                 for dup_set in dups:
                                     dup_set.sort(key=lambda plane_roi: roi_trace_strengths[plane_roi[0]][plane_roi[1]], reverse=True)
-                                
-                                n_success += 1
+
+                            print(f"Processed {len(dups)} duplicates in {mouse}_{cv} (success = {success})")
 
                             save_duplicates_to_h5(new_session_group, dups, best_roi_method=best_roi_method)
+                            if success: n_success += 1
                             n_total += 1
                         else:
                             new_file.copy(source=old_session_group[plane], dest=new_session_group)
