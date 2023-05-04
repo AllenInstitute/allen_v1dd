@@ -44,8 +44,9 @@ class EMClient:
                  layer_separations=[-np.inf, 100, 270, 400, 550, 750],
                  layer_names=["1", "2/3", "4", "5", "6"],
                  transform_nm_to_microns=v1dd_transform_nm,
+                 desired_resolution=DEFAULT_VOXEL_RESOLUTION
                  ):
-        self.cave_client = CAVEclient(datastack_name=datastack_name, server_address=server_address, desired_resolution=DEFAULT_VOXEL_RESOLUTION)
+        self.cave_client = CAVEclient(datastack_name=datastack_name, server_address=server_address, desired_resolution=desired_resolution)
         self.cave_client_seg_cv = self.cave_client.info.segmentation_cloudvolume(progress=True, parallel=1)
         self._transform_nm_to_microns = transform_nm_to_microns() # Transform from nm to oriented microns
         self._neuron_meshwork_cache = {} # root_id -> meshparty.meshwork.meshwork.Meshwork
@@ -173,7 +174,7 @@ class EMClient:
         
         if drop_duplicates:
             nuclei_in_box.drop_duplicates("pt_root_id", keep=False, inplace=True)
-            nuclei_in_box.reset_index(inplace=True)
+            nuclei_in_box.reset_index(inplace=True, drop=True)
         
         self.df_position_to_microns(nuclei_in_box, "pt_position", "position_microns")
 
@@ -207,7 +208,7 @@ class EMClient:
         else:
             raise ValueError(f"bad box_type: {box_type}")
 
-        nuclei_in_box.reset_index(inplace=True)
+        nuclei_in_box.reset_index(inplace=True, drop=True)
         return nuclei_in_box
 
 
