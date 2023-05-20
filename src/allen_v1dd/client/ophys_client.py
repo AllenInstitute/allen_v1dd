@@ -37,7 +37,7 @@ class OPhysClient:
         if database_path is None or database_path == "isilon":
             database_path = path.join(os.sep, "allen", "programs", "mindscope", "workgroups", "surround", "v1dd_in_vivo_new_segmentation", "data")
             print("Defaulting to V1DD data in allen drive:", database_path)
-        elif database_path == "chase":
+        elif database_path == "chase" or database_path == "chase_local":
             database_path = "/Users/chase/Desktop/test_v1dd_data"
 
         self.database_path = database_path

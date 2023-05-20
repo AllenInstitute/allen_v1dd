@@ -42,15 +42,23 @@ def load_analysis_file(filename: str=None):
     return h5py.File(filename, "r")
 
 def set_included_mice(mice_ids=None):
+    if type(mice_ids) is int:
+        mice_ids = [mice_ids]
     ANALYSIS_PARAMS["included_mice"] = mice_ids
 
 def set_included_columns(column_ids=None):
+    if type(column_ids) is int:
+        column_ids = [column_ids]
     ANALYSIS_PARAMS["included_columns"] = column_ids
 
 def set_included_volumes(volume_ids=None):
-    ANALYSIS_PARAMS["included_volumes"] = volume_ids
+    if type(volume_ids) is int:
+        volume_ids = [volume_ids]
+    ANALYSIS_PARAMS["plane_ids"] = volume_ids
 
 def set_included_planes(plane_ids=None):
+    if type(plane_ids) is int:
+        plane_ids = [plane_ids]
     ANALYSIS_PARAMS["included_planes"] = plane_ids
 
 def iter_plane_groups(filename: str=None, filter=None, return_session_group=False):

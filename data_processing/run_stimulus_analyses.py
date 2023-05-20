@@ -11,7 +11,7 @@ from allen_v1dd.client import OPhysClient, OPhysSession
 from allen_v1dd.stimulus_analysis import *
 from allen_v1dd.stimulus_analysis.running_correlation import save_roi_running_correlations
 from allen_v1dd.parallel_process import ParallelProcess
-from allen_v1dd.duplicate_rois import get_duplicate_roi_pairs_in_session, get_unique_duplicate_rois, save_duplicates_to_h5
+from allen_v1dd.duplicate_rois import get_duplicate_roi_pairs_in_session, get_unique_duplicate_rois, save_duplicates_to_h5, get_ignored_duplicates
 
 def get_h5_group(file, group_path):
     curr_group = file
@@ -22,8 +22,6 @@ def get_h5_group(file, group_path):
             curr_group = curr_group.create_group(name)
 
     return curr_group
-
-
 
 class RunStimulusAnalysis(ParallelProcess):
     def __init__(self, ophys_client, session_ids, stim_analysis_classes, additional_plane_group_tasks, save_dir, task_params):
@@ -114,16 +112,14 @@ class RunStimulusAnalysis(ParallelProcess):
         # Load duplicate ROIs
         best_roi_method = "trace_strength"
         should_check_dups = len(planes_to_load) > 1
-        is_ignored_duplicate = set() # (plane, roi)
+        is_ignored_duplicate = set()
         if should_check_dups:
             debug("Loading duplicate ROIs")
             duplicate_roi_pairs = get_duplicate_roi_pairs_in_session(session)
             duplicate_rois = get_unique_duplicate_rois(duplicate_roi_pairs, best_roi_method=best_roi_method)
-            for dup in duplicate_rois:
-                for plane_and_roi in dup["plane_and_roi"]:
-                    for i in range(len(plane_and_roi)):
-                        if i == dup["best_roi_index"]: continue
-                        is_ignored_duplicate.add(plane_and_roi)
+            is_ignored_duplicate = get_ignored_duplicates(duplicate_rois)
+            for dup_list in duplicate_rois:
+                is_ignored_duplicate.update(dup_list[1:])
         else:
             duplicate_rois = None
         

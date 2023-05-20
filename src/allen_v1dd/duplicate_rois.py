@@ -159,7 +159,7 @@ def get_unique_duplicate_rois(duplicate_roi_pairs: list, best_roi_method: str="t
     connected_components = get_connected_components(dup_rois_graph)
 
     # Merge duplicate ROIs across all planes
-    dup_rois_unique = [] # { plane_and_roi: [...], best_index: 0 }
+    dup_rois_unique = [] # [ [(plane1, roi1), (plane2, roi2), ...], [...], ... ]
 
     for plane_and_roi in connected_components:
         plane_and_roi.sort(key=comparison_values.get, reversed=True)
@@ -169,6 +169,14 @@ def get_unique_duplicate_rois(duplicate_roi_pairs: list, best_roi_method: str="t
         dup_rois_unique.append(plane_and_roi)
 
     return dup_rois_unique
+
+def get_ignored_duplicates(duplicates):
+    ignored_duplicates = set() # (plane, roi)
+    for dup_list in duplicates:
+        # Everything after the first is an ignored duplicate
+        ignored_duplicates.update(dup_list[1:])
+    return ignored_duplicates
+
 
 def save_duplicates_to_h5(session_group, duplicate_rois, best_roi_method, group_name="duplicate_rois"):
     dup_group = session_group.create_group(group_name)
