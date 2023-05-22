@@ -64,7 +64,10 @@ class OPhysClient:
 
     def _update_file_cache(self):
         # Update nwb_files in cache
-        self._nwb_files = glob(path.join(self.database_path, "nwbs", "processed", "*.nwb"), recursive=True) # look in subfolders
+        # self._nwb_files = glob(path.join(self.database_path, "nwbs", "processed", "*.nwb"), recursive=True) # look in subfolders
+        nwb_files = glob(path.join(self.database_path, "nwbs", "**", "*.nwb"), recursive=True)
+        nwb_files = [f for f in nwb_files if "problematic" not in f]
+        self._nwb_files = nwb_files
 
     def get_all_session_ids(self) -> list:
         """Get all session IDs in the database.
@@ -73,7 +76,6 @@ class OPhysClient:
             list: List of all session IDs in the database.
         """
         self._update_file_cache()
-        # nwb_files = glob(path.join(self.database_path, "nwbs", "*.nwb")) # look in parent directory
         session_ids = [self.get_session_id(f) for f in self._nwb_files]
         session_ids.sort()
         return session_ids
