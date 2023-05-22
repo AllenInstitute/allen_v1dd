@@ -58,7 +58,7 @@ class RunStimulusAnalysis(ParallelProcess):
             # The args here must match the args in the job method
             args.append((self.ophys_client, session_id, self.stim_analysis_classes, self.additional_plane_group_tasks, output_file))
 
-        print(f"There are {len(args)} total planes to process.")
+        print(f"There are {len(args)} total sessions to process.")
         job_results = self.run(args, parallel=True) # list of (file, group) tuples (return values of job)
         
         # Once jobs are done, merge the temporary files into a single file
@@ -128,10 +128,10 @@ class RunStimulusAnalysis(ParallelProcess):
             session_group = get_h5_group(file, session_group_path)
 
             # Save general session information
-            plane_group.attrs["session_id"] = session.session_id
-            plane_group.attrs["mouse"] = session.mouse_id
-            plane_group.attrs["column"] = session.column_id
-            plane_group.attrs["volume"] = session.volume_id
+            session_group.attrs["session_id"] = session.session_id
+            session_group.attrs["mouse"] = session.mouse_id
+            session_group.attrs["column"] = session.column_id
+            session_group.attrs["volume"] = session.volume_id
 
             for plane in planes_to_load:
                 plane_group = session_group.create_group(f"Plane_{plane}")
