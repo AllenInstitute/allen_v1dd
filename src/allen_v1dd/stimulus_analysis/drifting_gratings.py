@@ -69,7 +69,7 @@ class DriftingGratings(StimulusAnalysis):
         self.n_null_distribution_boot = 2500
         self.n_chisq_shuffles = 100 if quick_load else 1000
         self.fit_tuning_curve = not quick_load # Whether to fit tuning curves to ROI responses
-        self.si_perm_test_n_shuffles = 100 if quick_load else 10000
+        self.si_perm_test_n_shuffles = 100 if quick_load else 2500
         
         if trace_type == "dff":
             self.baseline_time_window = (-3, 0) # Time window used to offset/"demean" the event traces
