@@ -162,7 +162,7 @@ def get_unique_duplicate_rois(duplicate_roi_pairs: list, best_roi_method: str="t
     dup_rois_unique = [] # [ [(plane1, roi1), (plane2, roi2), ...], [...], ... ]
 
     for plane_and_roi in connected_components:
-        plane_and_roi.sort(key=comparison_values.get, reversed=True)
+        plane_and_roi.sort(key=comparison_values.get, reverse=True)
         # roi_mask_sizes = [mask_size[x] for x in plane_and_roi]
         # best_roi_index = int(np.argmax(roi_mask_sizes)) # ROI to keep is the one with the biggest mask
 
