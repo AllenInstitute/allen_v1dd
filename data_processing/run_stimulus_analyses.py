@@ -200,7 +200,7 @@ class RunStimulusAnalysis(ParallelProcess):
                         print_exc()
 
             # Duplicate ROI information
-            save_duplicates_to_h5(session_group, duplicate_rois, group_name="duplicate_rois")
+            save_duplicates_to_h5(session_group, duplicate_rois, best_roi_method=best_roi_method, group_name="duplicate_rois")
 
         del session
         debug("Done")
