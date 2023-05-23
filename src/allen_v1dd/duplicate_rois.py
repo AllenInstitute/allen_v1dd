@@ -79,7 +79,7 @@ def get_duplicate_roi_pairs_in_session(session: OPhysSession, comparison_metric_
                 "centroid_dist_pixels": centroid_dist,
                 "mask_similarity": mask_similarity,
                 "trace_strength_roi_1": np.quantile(traces_1[roi_1], trace_strength_quantile),
-                "trace_strength_roi_2": np.quantile(traces_1[roi_2], trace_strength_quantile),
+                "trace_strength_roi_2": np.quantile(traces_2[roi_2], trace_strength_quantile),
                 "mask_size_roi_1": int(np.sum(roi_mask_1)),
                 "mask_size_roi_2": int(np.sum(roi_mask_2)),
             }
