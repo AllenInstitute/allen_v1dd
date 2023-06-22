@@ -89,7 +89,6 @@ def iter_plane_groups(filename: str=None, filter=None, return_session_group=Fals
 
                     if "plane" not in plane_group.attrs: continue # Make sure it is actually a plane
 
-
                     if filter is None:
                         if mice is not None and plane_group.attrs["mouse"] not in mice: continue # Ignore mice
                         if cols is not None and plane_group.attrs["column"] not in cols: continue # Ignore columns
@@ -117,6 +116,10 @@ def iter_plane_groups(filename: str=None, filter=None, return_session_group=Fals
                         yield session_group, plane_group
                     else:
                         yield plane_group
+
+def get_roi_id(group, roi):
+    return f"{group.attrs['session_id']}_{group.attrs['plane']}_{roi}"
+
 
 def load_roi_metrics(metrics_file="../../data_frames/v1dd_metrics.csv", add_columns=True, remove_invalid=True, remove_duplicates=True):
     """Load metrics from the saved CSV file. Default file path is relative so can be accessed from notebooks.
