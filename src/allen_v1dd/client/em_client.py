@@ -11,6 +11,7 @@ from meshparty.meshwork.meshwork import Meshwork
 
 
 V1DD_DATASTACK_NAME = "v1dd"
+# CAVE_SERVER_ADDRESS = "https://global.em.brain.allentech.org"
 CAVE_SERVER_ADDRESS = "https://globalv1.em.brain.allentech.org"
 
 # LAYER_BOUNDARIES = [200, 375, 500, 680, 850]

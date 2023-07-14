@@ -38,22 +38,36 @@ def vonmises_two_peak_fit(x, y, p0=None, max_fn_calls=(2000, 10000)):
             pass # Absorb errors
     return None # Return None if no fit was successful
 
-def vonmises_two_peak_get_pref_dir_and_amplitude(params):
+def vonmises_two_peak_get_pref_dir(params, return_param_index=False):
     x0 = params[2]
     x1 = (x0 + 180) % 360
     peak_1 = vonmises_two_peak_get_amplitude(x0, params)
     peak_2 = vonmises_two_peak_get_amplitude(x1, params)
-
-    if peak_1 > peak_2:
-        return x0, peak_1
+    if return_param_index:
+        return 0 if peak_1 > peak_2 else 1
     else:
-        return x1, peak_2
+        return x0 if peak_1 > peak_2 else x1
 
 def vonmises_two_peak_get_amplitude(x, params):
     return vonmises_two_peak(x, *params) - params[-1] # f(x) - b
 
+def vonmises_two_peak_get_pref_dir_and_amplitude(params):
+    x = vonmises_two_peak_get_pref_dir(params)
+    peak = vonmises_two_peak_get_amplitude(x, params)
+    return x, peak
+
+def vonmises_two_peak_get_sharpness(params, offset_deg=45):
+    x, amp_peak = vonmises_two_peak_get_pref_dir_and_amplitude(params)
+    amp_offset = vonmises_two_peak_get_amplitude(x + offset_deg, params)
+    return (amp_peak - amp_offset) / (amp_peak + amp_offset)
+
+def vonmises_two_peak_get_peak_k(params):
+    i = vonmises_two_peak_get_pref_dir(params, return_param_index=True)
+    return params[3 if i == 0 else 5]
 
 def r2_score(y_true, y_pred):
+    if type(y_true) is not np.ndarray: y_true = np.array(y_true)
+    if type(y_pred) is not np.ndarray: y_pred = np.array(y_pred)
     ss_residuals = float(np.sum(np.square(y_true - y_pred)))
     ss_total = float(np.sum(np.square(y_true - np.mean(y_true))))
     if ss_total == 0:

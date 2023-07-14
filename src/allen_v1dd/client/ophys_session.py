@@ -9,6 +9,8 @@ import xarray as xr
 
 # from ..stimulus_analysis.timing_utils import find_nearest
 
+from allen_v1dd.eye_tracking import eye_tracking_processing
+
 class OPhysSession:
     """Represents a ophys session data wrapper."""
 
@@ -665,3 +667,13 @@ class OPhysSession:
             run_array = xr.DataArray(running_speed, name="running_speed", coords=dict(time=timestamps))
             self._trace_cache[cache_key] = run_array
             return run_array.copy()
+
+    def get_eye_tracking(self):
+        """Gets the eye tracking dataframe."""
+        # NOTE: this is untested!!!
+        return eye_tracking_processing.get_eye_tracking_df(self)
+    
+    def get_normalized_pupil_diameter(self):
+        """Gets the normalized pupil diameter trace."""
+        # NOTE: this is untested!!!
+        return eye_tracking_processing.get_normalized_pupil_diameter(self)

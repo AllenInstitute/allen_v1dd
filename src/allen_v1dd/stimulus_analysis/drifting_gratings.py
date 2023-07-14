@@ -150,6 +150,11 @@ class DriftingGratings(StimulusAnalysis):
         ds = group.create_dataset("trial_running_speeds", data=trial_running_speeds)
         ds.attrs["dimensions"] = list(trial_running_speeds.dims)
 
+        # Blank response running speeds
+        blank_running_speeds = self.blank_response_running_speeds
+        ds = group.create_dataset("blank_running_speeds", data=blank_running_speeds)
+        ds.attrs["dimensions"] = ["trial"]
+
         # Various other metrics
         for col in ("dsi", "osi", "gosi", "pref_dir_mean", "lifetime_sparseness"):
             group.create_dataset(col, data=get_met_col(col, default_val=np.nan, dtype=float))
@@ -338,9 +343,23 @@ class DriftingGratings(StimulusAnalysis):
         return self._sweep_responses
 
     @property
+    def blank_response_running_speeds(self):
+        null_stim_idx = self.stim_table.index[self.stim_table.isna().any(axis=1)]
+        blank_running_speeds = np.zeros(len(null_stim_idx), dtype=float)
+        running_padding = 0.1
+        running_speed = self.session.get_running_speed()
+
+        for trial, stim_i in enumerate(null_stim_idx):
+            start = self.stim_table.at[stim_i, "start"] - running_padding
+            end = self.stim_table.at[stim_i, "end"] + running_padding
+            mean_run = running_speed.sel(time=slice(start, end)).mean().item() # cm/s; mean running speed during stimulus sweep
+            blank_running_speeds[trial] = mean_run
+        
+        return blank_running_speeds
+
+    @property
     def trial_running_speeds(self):
         running_padding = 0.1
-
         running_speed = self.session.get_running_speed()
         trial_running_speeds = xr.DataArray(
             data=np.nan,

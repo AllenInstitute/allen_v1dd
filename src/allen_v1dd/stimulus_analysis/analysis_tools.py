@@ -120,6 +120,20 @@ def iter_plane_groups(filename: str=None, filter=None, return_session_group=Fals
 def get_roi_id(group, roi):
     return f"{group.attrs['session_id']}_{group.attrs['plane']}_{roi}"
 
+def plane_group_filter(roi_id, roi_in_filter=False):
+    s = roi_id.split("_")
+    filt = dict(
+        mouse = int(s[0][1:]),
+        column = int(s[1][0]),
+        volume = try_parse_int(s[1][1]), # because some volumes can be a, b, c, ...
+        plane = int(s[2])
+    )
+    roi = int(s[3])
+    if roi_in_filter:
+        filt["roi"] = roi
+        return filt
+    else:
+        return filt, roi
 
 def load_roi_metrics(metrics_file="../../data_frames/v1dd_metrics.csv", add_columns=True, remove_invalid=True, remove_duplicates=True):
     """Load metrics from the saved CSV file. Default file path is relative so can be accessed from notebooks.
