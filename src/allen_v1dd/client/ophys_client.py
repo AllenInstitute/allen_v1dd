@@ -1,3 +1,4 @@
+import os
 from os import path
 import numpy as np
 from glob import glob
@@ -33,12 +34,15 @@ class OPhysClient:
         Args:
             database_path (str): Path to physiology database
         """
-        if database_path is None:
-            database_path = path.join("allen", "programs", "mindscope", "workgroups", "surround", "v1dd_in_vivo_new_segmentation", "data")
+        if database_path is None or database_path == "isilon":
+            database_path = path.join(os.sep, "allen", "programs", "mindscope", "workgroups", "surround", "v1dd_in_vivo_new_segmentation", "data")
             print("Defaulting to V1DD data in allen drive:", database_path)
+        elif database_path == "chase" or database_path == "chase_local":
+            database_path = "/Users/chase/Desktop/test_v1dd_data"
 
         self.database_path = database_path
         self._nwb_files = None
+        self._session_cache = {}
 
     def get_session_id(self, nwb_file) -> str:
         """Get the corresponding session id from a file
@@ -60,7 +64,10 @@ class OPhysClient:
 
     def _update_file_cache(self):
         # Update nwb_files in cache
-        self._nwb_files = glob(path.join(self.database_path, "nwbs", "**", "*.nwb"), recursive=True) # look in subfolders
+        # self._nwb_files = glob(path.join(self.database_path, "nwbs", "processed", "*.nwb"), recursive=True) # look in subfolders
+        nwb_files = glob(path.join(self.database_path, "nwbs", "**", "*.nwb"), recursive=True)
+        nwb_files = [f for f in nwb_files if "problematic" not in f]
+        self._nwb_files = nwb_files
 
     def get_all_session_ids(self) -> list:
         """Get all session IDs in the database.
@@ -69,12 +76,11 @@ class OPhysClient:
             list: List of all session IDs in the database.
         """
         self._update_file_cache()
-        # nwb_files = glob(path.join(self.database_path, "nwbs", "*.nwb")) # look in parent directory
         session_ids = [self.get_session_id(f) for f in self._nwb_files]
         session_ids.sort()
         return session_ids
 
-    def load_ophys_session(self, session_id: str=None, mouse: int=None, column: int=None, volume: any=None, log=None) -> OPhysSession:
+    def load_ophys_session(self, session_id: str=None, mouse: int=None, column: int=None, volume: any=None, log=None, cache: bool=False) -> OPhysSession:
         """Load ophys session data
 
         Args:
@@ -83,12 +89,16 @@ class OPhysClient:
             column (int): Imaging column ID
             volume (any): Volume ID
             log (any): Output for session loading logs. Defaults to None (i.e., no logs).
+            cache (bool): Whether or not to cache the loaded session. Defaults to False.
 
         Returns:
             OPhysSession: Loaded ophys session data, or None if no data with the matching parameters was found.
         """
         if session_id is None:
             session_id = f"M{mouse}_{column}{volume}"
+
+        if cache and session_id in self._session_cache:
+            return self._session_cache[session_id]
 
         if log is not None: log(f"Loading session {session_id}")
         if self._nwb_files is None:
@@ -100,6 +110,10 @@ class OPhysClient:
                 if log is not None: log(f"Found matching file {file_path}")
                 ophys_session = OPhysSession(self, session_id, file_path)
                 if log is not None: log(f"Session loaded")
+
+                if cache:
+                    self._session_cache[session_id] = ophys_session
+
                 return ophys_session
 
         return None

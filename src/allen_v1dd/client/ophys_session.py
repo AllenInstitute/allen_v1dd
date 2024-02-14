@@ -9,6 +9,8 @@ import xarray as xr
 
 # from ..stimulus_analysis.timing_utils import find_nearest
 
+from allen_v1dd.eye_tracking import eye_tracking_processing
+
 class OPhysSession:
     """Represents a ophys session data wrapper."""
 
@@ -53,8 +55,7 @@ class OPhysSession:
             for key in nwb_file["processing"].keys():
                 if key.startswith("rois_and_traces_plane"):
                     plane_name = key[key.rindex("_")+1:]
-                    plane_internal = int(plane_name[5:]) # Remove the "plane"
-                    plane = self.internal_to_plane(plane_internal)
+                    plane = int(plane_name[5:]) # Remove the "plane"
                     self._planes.append(plane)
 
                     rois = nwb_file[f"{self._rois_and_traces(plane)}/ImageSegmentation/imaging_plane"].keys()
@@ -62,7 +63,7 @@ class OPhysSession:
                     rois.sort()
                     self._plane_rois[plane] = rois
                     self._plane_depths[plane] = nwb_file[f"{self._rois_and_traces(plane)}/imaging_depth_micron"][()]
-                    self._plane_pika_roi_conf[plane] = nwb_file[f"analysis/roi_classification_pika/plane{plane_internal}/score"][()]
+                    self._plane_pika_roi_conf[plane] = nwb_file[f"analysis/roi_classification_pika/plane{plane}/score"][()]
 
 
         # Parse mouse, column, and volume
@@ -157,16 +158,6 @@ class OPhysSession:
         # Save in cache
         self._stim_table_cache[stim_name] = (stim_table, stim_meta)
         return stim_table, stim_meta
-
-    def plane_to_internal(self, plane: int) -> int:
-        # Convert plane to internal plane ID
-        # Planes are interally stored starting at zero
-        return plane - 1
-
-    def internal_to_plane(self, plane_internal: int) -> int:
-        # Convert internal plane ID to plane
-        # Outwardly, planes start at 1
-        return plane_internal + 1
 
     def _check_integrity(self, nwb_file):
         error_list = []
@@ -376,7 +367,7 @@ class OPhysSession:
         return self._planes
 
     def _rois_and_traces(self, plane: int) -> str:
-        return f"processing/rois_and_traces_plane{self.plane_to_internal(plane)}"
+        return f"processing/rois_and_traces_plane{plane}"
 
     def get_lims_experiment_id(self, plane: int) -> str:
         """Get the LIMS experiment ID for an imaging plane.
@@ -430,6 +421,22 @@ class OPhysSession:
             list: List of ROIs in the given plane.
         """
         return self._plane_rois[plane]
+    
+    def get_roi_xy_pixels(self, plane: int, roi: any) -> np.ndarray:
+        with self.open_file() as nwb_file:
+            plane_grp = nwb_file[f"{self._rois_and_traces(plane)}/ImageSegmentation"]
+
+            pixel_list = []
+            if type(roi) in (list, np.array, np.ndarray):
+                for r in roi:
+                    # rr = str(r)
+                    pixels = plane_grp[f"imaging_plane/roi_{r:04}/pix_mask"][()] # pad with leading zeros
+                    pixel_list.append(pixels)
+                return pixel_list
+            else:
+                pixels = plane_grp[f"imaging_plane/roi_{roi:04}/pix_mask"][()] # pad with leading zeros
+                return pixels
+
 
     def get_roi_image_mask(self, plane: int, roi: any) -> np.ndarray:
         """Get the binary ROI image mask of an ROI
@@ -514,12 +521,14 @@ class OPhysSession:
         """
         return self.get_pika_roi_confidence(plane, roi) > conf
 
-    def get_traces(self, plane: int, trace_type: str) -> tuple:
+    def get_traces(self, plane: int, trace_type: str, valid_only: bool=False, reload: bool=False) -> tuple:
         """Get the activity traces in a plane (either all traces or a single trace if an ROI is specified).
 
         Args:
             plane (int): ID of the imaging plane
             trace_type (str): Type of trace to extract, should be one of "raw", "demixed", "neuropil", "subtracted", "dff", "events"
+            valid_only (bool): Mask out rois that are not valid
+            reload (bool): Variable to reload data when data is already cached
 
         Raises:
             LookupError: If trace_type is invalid.
@@ -530,7 +539,7 @@ class OPhysSession:
         cache_key = (plane, trace_type)
 
         # Check if cached
-        if cache_key in self._trace_cache:
+        if (cache_key in self._trace_cache) & (~reload):
             return self._trace_cache[cache_key]
 
         prefix = self._rois_and_traces(plane)
@@ -548,19 +557,28 @@ class OPhysSession:
                 trace_grp = nwb_file[f'{prefix}/DfOverF/dff_raw']
             elif trace_type == "events":
                 # different for events
-                trace_grp = nwb_file[f'processing/l0_events_plane{self.plane_to_internal(plane)}/DfOverF/l0_events']
+                trace_grp = nwb_file[f'processing/l0_events_plane{plane}/DfOverF/l0_events']
+            elif trace_type == "cascade":
+                trace_grp = np.load(f'/home/david.wyrick/projects/V1DD/data/predictions_dff_{self.mouse_id}_{self.column_id}{self.volume_id}_{plane}_all-rois.npz')
             else:
                 raise LookupError(f'Do not understand "trace_type", should be one of the following ["raw", "demixed", "neuropil", "sutracted", "dff", "events"]. Got "{trace_type}".')
 
             trace_data = np.array(trace_grp["data"])
             time = trace_grp["timestamps"][()]
-        
+
+        #Select only valid cells
+        rois = np.array(self.get_rois(plane))
+        if valid_only:
+            mask = self.is_roi_valid(plane)
+        else:
+            mask = np.ones(trace_data.shape[0],dtype=bool)
+
         # Save in cache
         traces = xr.DataArray(
-            trace_data,
+            trace_data[mask],
             name=trace_type,
             dims=("roi", "time"),
-            coords=dict(roi=self.get_rois(plane), time=time)
+            coords=dict(roi=rois[mask], time=time)
         )
         self._trace_cache[cache_key] = traces
         
@@ -574,7 +592,7 @@ class OPhysSession:
             trace_type (str, optional): Type of trace; either "events" or "dff". Defaults to "events".
 
         Returns:
-            np.ndarray: Array of shape (n_rois, n_spont_frames) containing traces during spontaneous stimulus for each ROI.
+            xr.DataArray: Array of shape (n_rois, n_spont_frames) containing traces during spontaneous stimulus for each ROI.
         """
         # Pretty sure there is always only one 5min spontaneous stimulus but if this is not true then this needs changing
         table = self.get_stimulus_table("spontaneous")[0]
@@ -585,7 +603,41 @@ class OPhysSession:
         return spont_traces.rename(f"spont_{spont_traces.name}") \
             .sel(time=slice(start, end))
     
+    def interpolate_all_plane_traces_to_common_time_series(self, interp_method: str="linear", trace_type: str="events",valid_only: bool=True, reload: bool=False) -> xr.DataArray:
+        """Get the spontanenous stimulus response traces for each ROI.
 
+        Args:
+            common_time_series
+            interp_method (str, optional): Type of interpolation method: Defaults to linear
+            trace_type (str, optional): Type of trace; either "events" or "dff". Defaults to "events".
+
+        Returns:
+            # xr.DataArray: Array of shape (n_rois, n_spont_frames) containing traces during spontaneous stimulus for each ROI.
+            list of xr.DataArray
+        """
+        data_list = []; ts_list = []
+        for plane in self.get_planes():
+            cache_key = (plane, trace_type)
+
+            # Check if cached
+            if (cache_key in self._trace_cache) & (~reload):
+                plane_trace = self._trace_cache[cache_key]
+            else:
+                plane_trace = self.get_traces(plane, trace_type,valid_only=valid_only,reload=True)
+            
+            data_list.append(plane_trace)
+            ts_list.append(plane_trace.coords['time'].values)
+        
+        #Get "middle" time point
+        ts_mean = np.mean(ts_list,axis=0)
+        data_list_interp = []
+        for ii, plane_trace in enumerate(data_list):
+            data_interp = plane_trace.interp(time = ts_mean, method = interp_method, kwargs={'bounds_error':False})
+            data_list_interp.append(data_interp)
+
+        # xr.concat(data_list_interp,dim=xr.DataArray(np.arange(1,7),dims='plane'))
+        return data_list_interp
+            
     def get_running_speed(self):
         """Get the running speed (cm/s) for the current session.
 
@@ -595,7 +647,7 @@ class OPhysSession:
         cache_key = "running_speed" # same across all planes; just so we can cache it
 
         if cache_key in self._trace_cache:
-            return self._trace_cache[cache_key]
+            return self._trace_cache[cache_key].copy()
         else:
             # Load from NWB file
             with self.open_file() as nwb_file:
@@ -612,6 +664,16 @@ class OPhysSession:
                 running_speed[1:-1] = (total_dist[2:] - total_dist[:-2]) / (timestamps[2:] - timestamps[:-2]) # Central difference
 
             # Save in cache
-            self._trace_cache[cache_key] = xr.DataArray(running_speed, name="running_speed", coords=dict(time=timestamps))
+            run_array = xr.DataArray(running_speed, name="running_speed", coords=dict(time=timestamps))
+            self._trace_cache[cache_key] = run_array
+            return run_array.copy()
 
-        return running_speed, timestamps
+    def get_eye_tracking(self):
+        """Gets the eye tracking dataframe."""
+        # NOTE: this is untested!!!
+        return eye_tracking_processing.get_eye_tracking_df(self)
+    
+    def get_normalized_pupil_diameter(self):
+        """Gets the normalized pupil diameter trace."""
+        # NOTE: this is untested!!!
+        return eye_tracking_processing.get_normalized_pupil_diameter(self)

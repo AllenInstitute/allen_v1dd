@@ -6,14 +6,17 @@ xarray
 
 # Statistical tools
 statsmodels
-sklearn
+scikit-learn
 
 # Plotting
 matplotlib
 seaborn
 
-# Misc
+# Loading/packaging data
 h5py
+# pynwb
+
+# Misc
 tqdm
 ipywidgets==7.7.2 # version 8 doesn't work with my notebooks
 
@@ -23,3 +26,7 @@ standard_transform
 nglui
 pcg_skel
 meshparty
+
+# EM graph analyses
+networkx
+# graspologic
