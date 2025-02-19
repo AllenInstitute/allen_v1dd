@@ -6,7 +6,6 @@ import pandas as pd
 from scipy import stats as spstats
 from sklearn import metrics as skmetrics
 
-from . import DGModelDirectionTuning, DGModelDirectionTuningSizeGain, DGModelDirectionTuningRunningGain, DGModelDirectionTuningSizeRunningGain, DGModelDirectionTuningSizeDualRunningGain
 from . import training
 
 N_KFOLD_SPLITS = 5
@@ -16,6 +15,7 @@ PLANE_GROUP_FILTER = dict(mouse=409828, column=1)
 RUNNING_THRESHOLD = 1
 
 def get_model_config():
+    from . import DGModelDirectionTuning, DGModelDirectionTuningSizeGain, DGModelDirectionTuningRunningGain, DGModelDirectionTuningSizeRunningGain, DGModelDirectionTuningSizeDualRunningGain
     return {
         1: {
             "model_class": DGModelDirectionTuning,

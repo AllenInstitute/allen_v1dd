@@ -13,18 +13,10 @@ class DGModelDirectionTuningSizeRunningGain(DGModelBase):
     def __init__(self, running_threshold=1, **kwargs):
         super().__init__(**kwargs)
         self.weights_ = None # underscore at end to be consistent with sklearn
-        self.n_dimensions = 14 # 12 for direction, 1 for size, 1 for locomotion
+        self.n_feature_dimensions = 14 # 12 for direction, 1 for size, 1 for locomotion
+        self.n_weight_dimensions = 14
         self.n_labels = 48
         self.running_threshold = running_threshold
-        self._all_dg_X = np.zeros((self.n_labels, self.n_dimensions), dtype=int)
-        i = 0
-        for s in range(2):
-            for l in range(2):
-                for d in range(12):
-                    self._all_dg_X[i, d] = 1
-                    self._all_dg_X[i, -2] = s
-                    self._all_dg_X[i, -1] = l
-                    i += 1
     
     def _is_running(self, trial_info):
         return abs(trial_info["running_speed"]) >= self.running_threshold
@@ -39,11 +31,10 @@ class DGModelDirectionTuningSizeRunningGain(DGModelBase):
             return rss_loss(y_true=y, y_pred=y_pred, y_pred_grad=y_pred_grad)
         
         # Initial guess = mean tuning curve, no size or running modulation
-        x0 = np.empty(self.n_dimensions, dtype=float)
+        x0 = np.empty(self.n_weight_dimensions, dtype=float)
         for i in range(12):
             x0[i] = X[X[:, i] == 1].mean()
-        x0[-2] = 1 # size modulation
-        x0[-1] = 1 # running modulation
+        x0[12:] = 1 # modulation parameters
         
         res = self._minimize(obj_fn, x0)
         self.weights_ = res.x # save weights to local model state
@@ -76,7 +67,7 @@ class DGModelDirectionTuningSizeRunningGain(DGModelBase):
     def get_trial_feature_matrix(self, trial_infos, trial_labels):
         # One-hot encoding of trial labels
         n_trials = len(trial_infos)
-        trial_feature_matrix = np.zeros(shape=(n_trials, self.n_dimensions), dtype=int)
+        trial_feature_matrix = np.zeros(shape=(n_trials, self.n_feature_dimensions), dtype=int)
 
         for i, trial_info in enumerate(trial_infos):
             trial_feature_matrix[i, trial_info["direction"]] = 1 # set direction flag
@@ -112,7 +103,7 @@ class DGModelDirectionTuningSizeRunningGain(DGModelBase):
         self.weights_ = state
 
     def plot_fit(self, axs):
-        X = np.zeros((12, self.n_dimensions), dtype=int)
+        X = np.zeros((12, self.n_feature_dimensions), dtype=int)
         np.fill_diagonal(X, 1)
 
         for i, ax in enumerate(axs):

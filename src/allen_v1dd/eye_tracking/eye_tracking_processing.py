@@ -5,14 +5,10 @@ import pandas as pd
 import xarray as xr
 from scipy import ndimage, stats
 
-from allensdk.brain_observatory.behavior import eye_tracking_processing
-
-from allen_v1dd.client import OPhysSession
-
 class EyeTrackingError(Exception):
     pass
 
-def get_eye_tracking_df(session: OPhysSession):
+def get_eye_tracking_df(session):
     with session.open_file() as nwb_file:
         nwb_group = nwb_file["processing/eye_tracking_right/PupilTracking/eyetracking"]
         timestamps = nwb_group["timestamps"][()] # timestamps, seconds
@@ -23,14 +19,19 @@ def get_eye_tracking_df(session: OPhysSession):
     'pupil_center_x', 'pupil_center_y', 'pupil_width', 'pupil_height',
     'pupil_phi']
 
-    return eye_tracking_processing.process_eye_tracking_data(
-        eye_data = eye_data, 
-        frame_times = timestamps,
-        z_threshold = 5.0,
-        dilation_frames = 2
-    )
+    try:
+        from allensdk.brain_observatory.behavior import eye_tracking_processing
+        return eye_tracking_processing.process_eye_tracking_data(
+            eye_data = eye_data, 
+            frame_times = timestamps,
+            z_threshold = 5.0,
+            dilation_frames = 2
+        )
+    except ModuleNotFoundError:
+        raise ModuleNotFoundError("Eye tracking methods require allensdk! Please run `pip install allensdk`")
+    
 
-def get_normalized_pupil_diameter(session: OPhysSession):
+def get_normalized_pupil_diameter(session):
     eye_tracking_df = get_eye_tracking_df(session)
     
     # normalize to max pupil diameter after removing outliers

@@ -207,9 +207,9 @@ def train_and_evaluate(model: DGModelBase, plane_group_filter, kfold_splitter_fn
             except DGModelFailedFitError as e:
                 import traceback
                 if not suppress_warnings:
-                    traceback.print_exc()
-                    warnings.warn(f"Failed to fit {get_roi_id(group, roi)}: {repr(e)}")
+                    warnings.warn(f"Failed to fit {get_roi_id(group, roi)}")
                     warnings.warn(str(e.details))
+                    traceback.print_exc()
                 continue
 
             # Cross validation succeeded; now compute null metrics

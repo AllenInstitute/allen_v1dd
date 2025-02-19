@@ -130,4 +130,4 @@ class DGModelBase():
                 return res
         
         # Failed; raise error
-        raise DGModelFailedFitError("Failed to fit", res)
+        raise DGModelFailedFitError("Failed to fit", details=res)
