@@ -6,6 +6,7 @@ import xarray as xr
 import scipy.stats as st
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from tqdm.notebook import trange, tqdm
 
 from .stimulus_analysis import StimulusAnalysis
 from .proba_utils import get_chisq_response_proba
@@ -110,7 +111,7 @@ class NaturalMovie(StimulusAnalysis):
             return 0 if q == 0 else p/q
 
         all_metrics = []
-        for roi in range(self.n_rois):
+        for roi in trange(self.n_rois):
             roi_trial_resp = self.trial_responses.sel(roi=roi)
             metrics = {}
             all_metrics.append(metrics)
