@@ -6,6 +6,7 @@ import xarray as xr
 import scipy.stats as st
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from tqdm.notebook import trange, tqdm
 
 from .stimulus_analysis import StimulusAnalysis
 from .proba_utils import get_chisq_response_proba
