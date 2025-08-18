@@ -128,14 +128,10 @@ class NaturalMovie(StimulusAnalysis):
 
     def _load_metrics(self):
         all_metrics = []
-<<<<<<< HEAD
-        for roi in trange(self.n_rois):
-=======
 
         mean_trial_responses = self.trial_responses.mean(dim="repeat", skipna=True)
 
         for roi in range(self.n_rois):
->>>>>>> origin/main
             roi_trial_resp = self.trial_responses.sel(roi=roi)
             metrics = {}
             all_metrics.append(metrics)
