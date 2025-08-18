@@ -30,3 +30,6 @@ meshparty
 # EM graph analyses
 networkx
 # graspologic
+
+# For eye tracking methods
+allensdk

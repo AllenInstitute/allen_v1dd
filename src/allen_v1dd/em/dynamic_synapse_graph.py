@@ -1,5 +1,6 @@
 from collections.abc import Collection
 
+import numpy as np
 import pandas as pd
 
 from ..client import EMClient
@@ -9,13 +10,16 @@ class DynamicSynapseGraph(EMGraph):
     SYN_ATTRIBUTES = {
         "size": int,
         "soma_soma_dist": float,
-        "soma_soma_dist_horiz": float
+        "soma_soma_dist_horiz": float,
+        "syn_pre_soma_dist_straight": float,
+        "syn_post_soma_dist_straight": float,
     }
 
     def __init__(self, em_client: EMClient, debug=True, **kwargs):
         super().__init__(**kwargs)
         self.em_client = em_client
         self.debug = debug
+        self.max_cell_synapse_load = 8 # Max number of cells to load at each query
 
 
     def _has_loaded_syn(self, id, syn_type):
@@ -26,9 +30,10 @@ class DynamicSynapseGraph(EMGraph):
     def _set_node_attr(self, ids: list, attr: str, value: any):
         for id in ids:
             id = int(id)
-            # if not self.graph.has_node(id):
-            #     self.graph.add_node(id, {attr: value})
-            self.graph.nodes[id][attr] = value
+            if self.graph.has_node(id):
+                self.graph.nodes[id][attr] = value
+            else:
+                self.graph.add_node(id, attr=value)
 
 
     def _update_graph_with_synapses(self, synapse_df, syn_type):
@@ -56,7 +61,19 @@ class DynamicSynapseGraph(EMGraph):
         for _, row in synapse_df.iterrows():
             pre_id = int(row["pre_pt_root_id"])
             post_id = int(row["post_pt_root_id"])
-            attrs = {attr: attr_type(row[attr]) for attr, attr_type in self.SYN_ATTRIBUTES.items()}
+            attrs = {}
+            
+            for attr, attr_dtype in self.SYN_ATTRIBUTES.items():
+                val = None
+
+                if attr in row:
+                    val = row[attr]
+                elif attr == "syn_pre_soma_dist_straight":
+                    val = np.linalg.norm(row["pre_soma_position_microns"] - row["pre_pt_position_microns"]) if row["pre_soma_position_microns"] is not None else np.nan
+                elif attr == "syn_post_soma_dist_straight":
+                    val = np.linalg.norm(row["post_soma_position_microns"] - row["post_pt_position_microns"]) if row["post_soma_position_microns"] is not None else np.nan
+
+                attrs[attr] = attr_dtype(val)
             self.graph.add_edge(pre_id, post_id, **attrs)
 
 
@@ -86,20 +103,31 @@ class DynamicSynapseGraph(EMGraph):
             raise ValueError(f"bad syn_type: '{syn_type}'")
 
         ids_to_load = [id for id in root_ids if not self._has_loaded_syn(id, syn_type)]
+        if self.debug and len(ids_to_load) > 0: print(f"There are {len(ids_to_load)} neurons that need loaded {syn_type} synapses.")
+        
+        while len(ids_to_load) > 0:
+            next_ids_to_load = ids_to_load[self.max_cell_synapse_load:]
+            ids_to_load = ids_to_load[:self.max_cell_synapse_load]
 
-        if len(ids_to_load) > 0:
-            if self.debug: print(f"Loading {syn_type} synapses for {len(ids_to_load)} neurons.")
+            if self.debug:
+                msg = f"  Loading {syn_type} synapses for {len(ids_to_load)} neurons"
+                if len(next_ids_to_load) > 0:
+                    msg = f"{msg} ({len(next_ids_to_load)} remaining)"
+
+                print(msg)
 
             # Load synapses (expensive query)
             if syn_type == "axo":
-                synapse_df = self.em_client.get_axonal_synapses(root_ids)
+                synapse_df = self.em_client.get_axonal_synapses(ids_to_load)
             elif syn_type == "den":
-                synapse_df = self.em_client.get_dendritic_synapses(root_ids)
+                synapse_df = self.em_client.get_dendritic_synapses(ids_to_load)
 
             self._update_graph_with_synapses(synapse_df, syn_type) # Update graph with loaded synapses
             self._set_node_attr(ids_to_load, f"{syn_type}_syn_loaded", True) # Mark nodes as having loaded synapses
             self.save() # Save graph to file
-        
+
+            ids_to_load = next_ids_to_load
+
         # Now that we know the graph is updated with the synapses, query for the edges
         df = []
         for id in root_ids:

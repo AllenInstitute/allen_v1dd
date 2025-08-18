@@ -33,23 +33,40 @@ def set_analysis_file(filename):
     ANALYSIS_PARAMS.clear()
     ANALYSIS_PARAMS["stim_analysis_filename"] = filename
 
+def load_analysis_file(filename: str=None):
+    if filename is None:
+        filename = ANALYSIS_PARAMS.get("stim_analysis_filename")
+    if filename is None:
+        raise ValueError("No stimulus analysis file given. Set one using the set_analysis_file method or the filename argument.")
+    
+    return h5py.File(filename, "r")
+
 def set_included_mice(mice_ids=None):
+    if type(mice_ids) is int:
+        mice_ids = [mice_ids]
     ANALYSIS_PARAMS["included_mice"] = mice_ids
 
 def set_included_columns(column_ids=None):
+    if type(column_ids) is int:
+        column_ids = [column_ids]
     ANALYSIS_PARAMS["included_columns"] = column_ids
 
 def set_included_volumes(volume_ids=None):
-    ANALYSIS_PARAMS["included_volumes"] = volume_ids
+    if type(volume_ids) is int:
+        volume_ids = [volume_ids]
+    ANALYSIS_PARAMS["plane_ids"] = volume_ids
 
 def set_included_planes(plane_ids=None):
+    if type(plane_ids) is int:
+        plane_ids = [plane_ids]
     ANALYSIS_PARAMS["included_planes"] = plane_ids
 
-def iter_plane_groups(filename: str=None):
-    """Iterate all plane groups in an h5 analysis file
+def iter_plane_groups(filename: str=None, filter=None, return_session_group=False):
+    """Iterate all plane groups in an h5 analysis file.
 
     Args:
         filename (str, optional): Filename for h5 analysis file. Defaults to the filename set using set_analysis_file.
+        filter (dict or None, optional): Filter the plane group attributes. Defaults to None. If filter is set then it ignores the included params that have been set by other methods.
 
     Raises:
         ValueError: If no analysis file is supplied
@@ -57,34 +74,66 @@ def iter_plane_groups(filename: str=None):
     Yields:
         h5 group: All plane groups in analysis file
     """
-    if filename is None:
-        filename = ANALYSIS_PARAMS.get("stim_analysis_filename")
-    if filename is None:
-        raise ValueError("No stimulus analysis file given. Set one using the set_analysis_file method or the filename argument.")
-
     mice = ANALYSIS_PARAMS.get("included_mice")
     cols = ANALYSIS_PARAMS.get("included_columns")
     vols = ANALYSIS_PARAMS.get("included_volumes")
     planes = ANALYSIS_PARAMS.get("included_planes")
 
-    with h5py.File(filename, "r") as file:
+    with load_analysis_file(filename) as file:
         for mouse in file.keys():
             for colvol in file[mouse].keys():
-                plane_keys = file[mouse][colvol].keys()
+                session_group = file[mouse][colvol]
+                plane_keys = session_group.keys()
                 for plane in plane_keys:
-                    plane_group = file[mouse][colvol][plane]
+                    plane_group = session_group[plane]
 
-                    if "plane" not in plane_group.attrs: continue # Make sure it is actually a plane                    
-                    if mice is not None and plane_group.attrs["mouse"] not in mice: continue # Ignore mice
-                    if cols is not None and plane_group.attrs["column"] not in cols: continue # Ignore columns
-                    if vols is not None and plane_group.attrs["volume"] not in vols: continue # Ignore volumes
-                    if planes is not None and len(plane_keys) > 1 and plane_group.attrs["plane"] not in planes: continue # Ignore planes
+                    if "plane" not in plane_group.attrs: continue # Make sure it is actually a plane
+
+                    if filter is None:
+                        if mice is not None and plane_group.attrs["mouse"] not in mice: continue # Ignore mice
+                        if cols is not None and plane_group.attrs["column"] not in cols: continue # Ignore columns
+                        if vols is not None and plane_group.attrs["volume"] not in vols: continue # Ignore volumes
+                        if planes is not None and len(plane_keys) > 1 and plane_group.attrs["plane"] not in planes: continue # Ignore planes
+                    else:
+                        ignore = False
+                        for k, v in filter.items():
+                            if type(v) in (list, tuple):
+                                if plane_group.attrs[k] not in v:
+                                    ignore = True
+                            else:
+                                if plane_group.attrs[k] != v:
+                                    ignore = True
+                        
+                        if ignore:
+                            continue
+                        
 
                     # Quality check: must have >0 valid ROIs
                     # May remove this later...
                     if plane_group.attrs["n_rois_valid"] == 0: continue
 
-                    yield plane_group
+                    if return_session_group:
+                        yield session_group, plane_group
+                    else:
+                        yield plane_group
+
+def get_roi_id(group, roi):
+    return f"{group.attrs['session_id']}_{group.attrs['plane']}_{roi}"
+
+def plane_group_filter(roi_id, roi_in_filter=False):
+    s = roi_id.split("_")
+    filt = dict(
+        mouse = int(s[0][1:]),
+        column = int(s[1][0]),
+        volume = try_parse_int(s[1][1]), # because some volumes can be a, b, c, ...
+        plane = int(s[2])
+    )
+    roi = int(s[3])
+    if roi_in_filter:
+        filt["roi"] = roi
+        return filt
+    else:
+        return filt, roi
 
 def load_roi_metrics(metrics_file="../../data_frames/v1dd_metrics.csv", add_columns=True, remove_invalid=True, remove_duplicates=True):
     """Load metrics from the saved CSV file. Default file path is relative so can be accessed from notebooks.

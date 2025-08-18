@@ -9,8 +9,9 @@ import h5py
 
 from allen_v1dd.client import OPhysClient, OPhysSession
 from allen_v1dd.stimulus_analysis import *
+from allen_v1dd.stimulus_analysis.running_correlation import save_roi_running_correlations
 from allen_v1dd.parallel_process import ParallelProcess
-from allen_v1dd.duplicate_rois import get_duplicate_roi_pairs_in_session, get_unique_duplicate_rois
+from allen_v1dd.duplicate_rois import get_duplicate_roi_pairs_in_session, get_unique_duplicate_rois, save_duplicates_to_h5, get_ignored_duplicates
 
 def get_h5_group(file, group_path):
     curr_group = file
@@ -22,8 +23,6 @@ def get_h5_group(file, group_path):
 
     return curr_group
 
-
-
 class RunStimulusAnalysis(ParallelProcess):
     def __init__(self, ophys_client, session_ids, stim_analysis_classes, additional_plane_group_tasks, save_dir, task_params):
         super().__init__(save_dir=save_dir)
@@ -34,6 +33,7 @@ class RunStimulusAnalysis(ParallelProcess):
         self.additional_plane_group_tasks = additional_plane_group_tasks
         self.parent_file_path = path.join(self.get_save_dir(), "stimulus_analyses.h5")
         self.task_params = task_params
+        # self.max_n_processes = 32 # Michael's machine has 32
 
     @property
     def test_mode(self):
@@ -58,7 +58,7 @@ class RunStimulusAnalysis(ParallelProcess):
             # The args here must match the args in the job method
             args.append((self.ophys_client, session_id, self.stim_analysis_classes, self.additional_plane_group_tasks, output_file))
 
-        print(f"There are {len(args)} total planes to process.")
+        print(f"There are {len(args)} total sessions to process.")
         job_results = self.run(args, parallel=True) # list of (file, group) tuples (return values of job)
         
         # Once jobs are done, merge the temporary files into a single file
@@ -102,48 +102,51 @@ class RunStimulusAnalysis(ParallelProcess):
         session = client.load_ophys_session(session_id)
         session_group_path = session_id.split("_")
 
-        # Load all stimulus analyses objects
-        debug("Loading stimulus analysis objects")
-        test_max_planes = self.task_params.get("test_max_planes", -1)
+        # Load planes
         planes_to_load = session.get_planes()
+        test_max_planes = self.task_params.get("test_max_planes", -1)
         if self.test_mode and test_max_planes > 0:
-            planes_to_load = planes_to_load[-test_max_planes:]
-        stim_analyses_by_plane = {
-            plane: [
-                SA(session, plane, **kwargs)
-                for SA, kwargs in stim_analysis_classes
-            ]
-            for plane in planes_to_load
-        }
+            # planes_to_load = planes_to_load[-test_max_planes:]
+            planes_to_load = planes_to_load[:test_max_planes]
 
         # Load duplicate ROIs
-        debug("Loading duplicate ROIs")
-        duplicate_roi_pairs = get_duplicate_roi_pairs_in_session(session)
-        duplicate_rois = get_unique_duplicate_rois(duplicate_roi_pairs)
-        is_ignored_duplicate = set() # (plane, roi)
-        for dup in duplicate_rois:
-            for plane_and_roi in dup["plane_and_roi"]:
-                for i in range(len(plane_and_roi)):
-                    if i == dup["best_roi_index"]: continue
-                    is_ignored_duplicate.add(plane_and_roi)
+        best_roi_method = "trace_strength"
+        should_check_dups = len(planes_to_load) > 1
+        is_ignored_duplicate = set()
+        if should_check_dups:
+            debug("Loading duplicate ROIs")
+            duplicate_roi_pairs = get_duplicate_roi_pairs_in_session(session)
+            duplicate_rois = get_unique_duplicate_rois(duplicate_roi_pairs, best_roi_method=best_roi_method)
+            is_ignored_duplicate = get_ignored_duplicates(duplicate_rois)
+            for dup_list in duplicate_rois:
+                is_ignored_duplicate.update(dup_list[1:])
+        else:
+            duplicate_rois = None
         
         # Save to file
         with h5py.File(output_file, "w") as file:
             session_group = get_h5_group(file, session_group_path)
 
-            for plane, stim_analyses in stim_analyses_by_plane.items():
+            # Save general session information
+            session_group.attrs["session_id"] = session.session_id
+            session_group.attrs["mouse"] = session.mouse_id
+            session_group.attrs["column"] = session.column_id
+            session_group.attrs["volume"] = session.volume_id
+
+            for plane in planes_to_load:
                 plane_group = session_group.create_group(f"Plane_{plane}")
 
-                # Save the stimulus analysis information
-                # debug(f"Loading and saving stimulus analyses for plane {plane}")
-                for analysis in stim_analyses:
-                    group = plane_group.create_group(analysis.stim_name)
-
+                # Load and save stim analyses
+                debug(f"Loading and saving stimulus analyses for plane {plane}")
+                for SA, sa_kwargs in stim_analysis_classes:
+                    analysis = SA(session, plane, **sa_kwargs)
+                    analysis_group = plane_group.create_group(analysis.stim_name)
                     try:
-                        analysis.save_to_h5(group)
+                        analysis.save_to_h5(analysis_group)
                     except:
                         debug(f"Error while saving {analysis.stim_name} analyses in {session_id}, plane {plane}:", force=True)
                         print_exc()
+                    del analysis # memory thing; maybe not necessary
 
                 # Save general plane information
                 plane_group.attrs["session_id"] = session.session_id
@@ -153,7 +156,8 @@ class RunStimulusAnalysis(ParallelProcess):
                 plane_group.attrs["plane"] = plane
                 plane_group.attrs["plane_depth_microns"] = session.get_plane_depth(plane)
                 plane_group.attrs["date_created"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                is_roi_valid = session.is_roi_valid(plane)
+                pika_threshold = 0.5
+                is_roi_valid = session.is_roi_valid(plane, conf=pika_threshold)
                 n_rois = len(is_roi_valid)
                 plane_group.attrs["n_rois"] = n_rois
                 plane_group.attrs["n_rois_valid"] = np.count_nonzero(is_roi_valid)
@@ -161,7 +165,7 @@ class RunStimulusAnalysis(ParallelProcess):
                 # Is ROI valid
                 ds = plane_group.create_dataset("is_roi_valid", data=is_roi_valid)
                 ds.attrs["dimensions"] = ["roi"]
-                ds.attrs["pika_threshold"] = 0.5
+                ds.attrs["pika_threshold"] = pika_threshold
 
                 # Pika ROI score
                 ds = plane_group.create_dataset("pika_roi_score", data=session.get_pika_roi_confidence(plane))
@@ -190,21 +194,15 @@ class RunStimulusAnalysis(ParallelProcess):
                 # Run additional plane tasks
                 for task in additional_plane_group_tasks:
                     try:
-                        task(plane_group)
+                        task(session, plane, plane_group)
                     except:
                         debug(f"Error while running additional task {task}", force=True)
                         print_exc()
 
             # Duplicate ROI information
-            group = session_group.create_group("duplicate_rois")
-            all_duplicates = []
-            for dup in duplicate_rois:
-                plane_and_roi = dup["plane_and_roi"]
-                best_idx = dup["best_roi_index"]
-                all_duplicates.append(str([plane_and_roi[best_idx]] + plane_and_roi[:best_idx] + plane_and_roi[best_idx+1:]))
-            ds = group.create_dataset("all_duplicates", data=all_duplicates)
-            ds.attrs["notes"] = "Row format: [(best_plane, best_roi), (plane2, roi2), ...]"
+            save_duplicates_to_h5(session_group, duplicate_rois, best_roi_method=best_roi_method, group_name="duplicate_rois")
 
+        del session
         debug("Done")
 
         return output_file, session_group_path
@@ -250,25 +248,29 @@ if __name__ == "__main__":
     debug = args.debug
     task_params = {
         "debug": debug,
-        "test": test_mode
+        "test": test_mode,
+        "test_mode_max_sessions": 1
     }
 
     client = OPhysClient(base_folder)
 
     # Load sessions
     session_ids = client.get_all_session_ids()
-    test_max_sessions = task_params.get("test_mode_max_planes", -1)
+    test_max_sessions = task_params.get("test_mode_max_sessions", -1)
 
     if test_mode and test_max_sessions > 0 and len(session_ids) >= test_max_sessions:
         session_ids = session_ids[:test_max_sessions]
+
+    # Force session 13 if chase local and test
+    if test_mode and test_max_sessions == 1 and args.data_dir == "chase_local":
+        session_ids = ["M409828_13"]
 
     # Test mode: Only M409828 column 1
     # if test_mode: session_ids = [sid for sid in session_ids if sid.startswith("M409828_1")]
 
     # Test mode: Two sessions from two mice (to test merging)
     if test_mode:
-        session_ids = ["M409828_13", "M416296_13"]
-        task_params["test_max_planes"] = 1
+        task_params["test_max_planes"] = 2
 
     print(f"Sessions to load ({len(session_ids)}):")
     print(session_ids)
@@ -278,12 +280,16 @@ if __name__ == "__main__":
         (DriftingGratings, dict(dg_type="full", quick_load=test_mode, debug=(debug and test_mode))),
         (DriftingGratings, dict(dg_type="windowed", quick_load=test_mode, debug=(debug and test_mode))),
         (LocallySparseNoise, dict()),
+        (NaturalMovie, dict(compute_chisq=False)), # Chi-sq too slow
+        (NaturalImages, dict(ns_type="natural_images", compute_chisq=False)),
+        (NaturalImages, dict(ns_type="natural_images_12", compute_chisq=False)),
     ]
 
     # Additional tasks to be run after the stimulus analyses
     # Each task is a method with one argument (the plane h5 group)
     additional_plane_group_tasks = [
         DriftingGratings.compute_ssi_from_h5, # Computes SSI metrics from DGW and DGF analyses
+        save_roi_running_correlations,
     ]
 
     # Process all metrics-loading in parallel

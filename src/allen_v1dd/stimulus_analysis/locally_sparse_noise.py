@@ -8,6 +8,9 @@ import matplotlib.pyplot as plt
 
 from .stimulus_analysis import StimulusAnalysis
 
+def get_imshow_extent(azimuths, altitudes):
+    return [azimuths[0], azimuths[-1], altitudes[0], altitudes[-1]]
+
 class LocallySparseNoise(StimulusAnalysis):
     """Used to analyze the locally sparse noise stimulus.
 
@@ -50,8 +53,8 @@ class LocallySparseNoise(StimulusAnalysis):
         group.attrs["trace_type"] = self.trace_type
         group.attrs["frac_sig_trials_thresh"] = self.frac_sig_trials_thresh
         group.attrs["image_shape"] = self.image_shape
-        group.attrs["altitudes"] = self.altitudes
         group.attrs["azimuths"] = self.azimuths
+        group.attrs["altitudes"] = self.altitudes
         group.attrs["grid_size"] = self.grid_size
 
         # Is responsive
@@ -70,7 +73,7 @@ class LocallySparseNoise(StimulusAnalysis):
         
         # RF centers
         ds = group.create_dataset("rf_centers", data=self.rf_centers)
-        ds.attrs["dimensions"] = ["roi", "on (0) and off (1)", "altitude (0) and azimuth (1) (deg)"]
+        ds.attrs["dimensions"] = ["roi", "on (0) and off (1)", "azimuth (0) and altitude (1) (deg)"]
 
         # RF centers (computed by argmax)
         rf_centers_argmax = np.full((self.n_rois, 2, 2), np.nan)
@@ -82,7 +85,7 @@ class LocallySparseNoise(StimulusAnalysis):
                 alt, azi = self.point_to_alt_azi(alt_ctr=alt+0.5, azi_ctr=azi+0.5) # Add 0.5 to center in pixel
                 rf_centers_argmax[roi, onoff, :] = (azi, alt)
         ds = group.create_dataset("rf_centers_argmax", data=rf_centers_argmax)
-        ds.attrs["dimensions"] = ["roi", "on (0) and off (1)", "altitude (0) and azimuth (1) (deg)"]
+        ds.attrs["dimensions"] = ["roi", "on (0) and off (1)", "azimuth (0) and altitude (1) (deg)"]
 
         
 
@@ -115,7 +118,7 @@ class LocallySparseNoise(StimulusAnalysis):
     @property
     def imshow_extent(self):
         if self._imshow_extent is None:
-            self._imshow_extent = [self.azimuths[0], self.azimuths[-1], self.altitudes[0], self.altitudes[-1]]
+            self._imshow_extent = get_imshow_extent(azimuths=self.azimuths, altitudes=self.altitudes)
         return self._imshow_extent
 
     @property

@@ -1,7 +1,7 @@
 
 #!/bin/bash
 
-OUTPUT_FILE="/home/chase/v1dd_stim_analyses"
+OUTPUT_FILE="/mnt/drive2/chase/v1dd/v1dd_stim_analyses"
 
 echo "Stimulus analysis output file: $OUTPUT_FILE"
 
