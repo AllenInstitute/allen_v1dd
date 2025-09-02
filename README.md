@@ -1,5 +1,8 @@
+We are not currently supporting this code, but simply releasing it to the community AS IS but are not able to provide any guarantees of support. The community is welcome to submit issues, but you should not expect an active response. The reason being that we updated the old h5 file type to current NWB format. We might change this soon.
+
 # Allen Institute V1DD SDK
 *Primary Author:* Chase King ([iamchaseking@gmail.com](mailto:iamchaseking@gmail.org), now at Columbia)
+Secondary Author: David Wyrick (david.wyrick@alleninstitute.org)
 
 # Directory structure
 Inside the [`src/allen_v1dd`](src/allen_v1dd) directory is the source code for the `allen_v1dd` package. I currently have things structured so general-purpose data processing and analysis is in this folder, and notebooks are stored externally (e.g., mine are in [`chase/analysis`](chase/analysis), outside of the package root directory). I generally use these notebooks for experimenting or analyzing the outputs of things from the `allen_v1dd` package, and then can port new features (e.g., certain stimulus analyses) into the package.
