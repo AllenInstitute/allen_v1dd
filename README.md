@@ -1,7 +1,7 @@
 We are not currently supporting this code, but simply releasing it to the community AS IS but are not able to provide any guarantees of support. The community is welcome to submit issues, but you should not expect an active response. The reason being that we updated the old h5 file type to current NWB format. We might change this soon.
 
 # Allen Institute V1DD SDK
-*Primary Author:* Chase King ([iamchaseking@gmail.com](mailto:iamchaseking@gmail.org), now at Columbia)
+*Primary Author:* Chase King ([iamchaseking@gmail.com](mailto:iamchaseking@gmail.org), now at Columbia)  
 Secondary Author: David Wyrick (david.wyrick@alleninstitute.org)
 
 # Directory structure
