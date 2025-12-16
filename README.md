@@ -1,3 +1,4 @@
+Code Ocean version. Let's trim things down and edit code to read in new NWB format. 
 We are not currently supporting this code, but simply releasing it to the community AS IS but are not able to provide any guarantees of support. The community is welcome to submit issues, but you should not expect an active response. The reason being that we updated the old h5 file type to current NWB format. We might change this soon.
 
 # Allen Institute V1DD SDK
