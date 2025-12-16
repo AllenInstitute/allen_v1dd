@@ -1,6 +1,6 @@
 DataDir = "/allen/programs/mindscope/workgroups/surround/v1dd_in_vivo_new_segmentation/data"  # Local on robinson for golden mouse
-SaveDir_local = '/data/v1dd_in_vivo_new_segmentation/real_nwbs'
-SaveDir_server = '/allen/programs/mindscope/workgroups/surround/v1dd_in_vivo_new_segmentation/real_nwbs'
+SaveDir_local = '/data/v1dd_in_vivo_new_segmentation/nwb_202512_update'
+SaveDir_server = '/allen/programs/mindscope/workgroups/surround/v1dd_in_vivo_new_segmentation/nwb_202512_update'
 #Base
 import argparse
 import sys, os
@@ -37,7 +37,9 @@ import h5py
 JuneDir = '/allen/programs/mindscope/workgroups/surround/v1dd_in_vivo_new_segmentation/v1dd_physiology/v1dd_physiology/nwb_building'
 sys.path.append(JuneDir)
 import utils as jun
-
+import warnings
+# FutureWarning
+warnings.simplefilter(action='ignore', category=FutureWarning)
 ##------------------------------------------
 # Metadata
 meta_path = os.path.join(
@@ -58,6 +60,9 @@ parser = argparse.ArgumentParser(description='NWB')
 parser.add_argument('--nwb_backend',type=str, default='zarr',
                     help='NWB backend to use')
 
+parser.add_argument('--process',type=str, default='2p',
+                    help='2p or 3p sessions')
+
 parser.add_argument('--save_location',type=str, default='server',
                     help='Local or server location')
 
@@ -70,7 +75,7 @@ def _configure_stimulus_table(stimulus_df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         pd.DataFrame: Configured stimulus DataFrame.
     """
-    stim_cols = ['stim_name','start_time', 'stop_time', 'temporal_frequency', 'spatial_frequency', 'direction','frame','image_order','image_index'] 
+    stim_cols = ['stim_name','start_time', 'stop_time', 'temporal_frequency', 'spatial_frequency','center_azimuth','center_elevation','direction','frame','image_order','image_index'] 
     
     if 'image' in stimulus_df.columns:
         # Rename 'image' to 'image_order' if it exists
@@ -84,7 +89,7 @@ def _configure_stimulus_table(stimulus_df: pd.DataFrame) -> pd.DataFrame:
     stimulus_df = stimulus_df[stim_cols]
 
     # Convert data types
-    stimulus_df = stimulus_df.astype({'stim_name':str,'start_time':float, 'stop_time':float, 'temporal_frequency':float, 'spatial_frequency':float, 'direction':float,'frame':float,'image_order':float,'image_index':float})
+    stimulus_df = stimulus_df.astype({'stim_name':str,'start_time':float, 'stop_time':float, 'temporal_frequency':float, 'spatial_frequency':float, 'center_azimuth':float, 'center_elevation':float, 'direction':float,'frame':float,'image_order':float,'image_index':float})
 
     return stimulus_df
 
@@ -92,6 +97,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     nwb_backend = args.nwb_backend 
     save_location = args.save_location
+    process = args.process
 
     if save_location == 'local':
         SaveDir = SaveDir_local
@@ -101,11 +107,15 @@ if __name__ == '__main__':
     #V1DD Client
     client = OPhysClient(DataDir)
 
-    import warnings
-    # FutureWarning
-    warnings.simplefilter(action='ignore', category=FutureWarning)
-    
+
+    experiment_metadata = pd.read_csv('../data_frames/experiment_metadata_202512_update.csv')
+
+    ##------------------------------------------ 
     #Loop over the 4 mice and create NWB files per session
+
+    microscope_2p_id = 722885523
+    microscope_3p_id = 762899596
+    nwb_backend = 'zarr' #iExp
     for m_key, mID_dict in meta.items():
         if m_key == 'slc1':
             continue
@@ -121,44 +131,48 @@ if __name__ == '__main__':
             mouse_desc = 'Golden Mouse'
         else:
             mouse_desc = f'2p Mouse, M{mID}'
-        print(f'\nprocessing mouse_id: {mID} ...')
 
+        print(f'\nprocessing mouse_id: {mID} ...')
         # if mID in ['409828','416296','427836']:
         #     continue
-        sesses = jun.get_all_sessions(mID)
-        sesses_2p = jun.pick_2p_sessions(sesses)
 
-        for sn, smeta in sesses_2p.items():
+        # if mID != '409828':
+        #     continue
+
+        sesses = jun.get_all_sessions(mID)
+        if process == '2p':
+            sesses = jun.pick_2p_sessions(sesses)
+        elif process == '3p':
+            sesses = jun.pick_3p_sessions(sesses)
+
+        for sn, smeta in sesses.items():
             print(f'\tadding session: {sn} ...')
             col = smeta['column']
             vol = smeta['volume']
-
-
-            try:
-                date = smeta['date']
-                fake_nwb_path = os.path.join(DataDir,'nwbs','processed',f'M{mID}_{col}{vol}_{date}.nwb')
-
-            except:
-                #Get date from NWB file
-                fake_nwb_path = glob(os.path.join(DataDir,'nwbs','processed',f'M{mID}_{col}{vol}_*.nwb'))[0]
-                date = fake_nwb_path.split('_')[-1].split('.')[0]
-
-            #Ensure file has not been created yet
-            fpath = os.path.join(SaveDir_local,f'M{mID}_{col}{vol}_{date}.nwb')
-            fpath = fpath + '.zarr' if nwb_backend == 'zarr' else fpath
-            if os.path.exists(fpath):
-                print(f'\t\tfile already exists: {fpath}')
-                continue
-    
             lims_path = jun.get_lims_session_path(
                 sess=smeta, 
                 prod=prod, 
                 btv_path="/allen/programs/braintv"
                 )
             
-            #Get session start time
-            #TODOLIST: this is hardcoded to 9am, need to get from LIMS or somewhere
-            session_start_time = datetime(int(date[0:4]),int(date[4:6]),int(date[6:8]),9,0,0,tzinfo=tz.gettz("US/Pacific"))
+            try:
+                date = smeta['date']
+                fake_nwb_path = os.path.join(DataDir,'nwbs','processed',f'M{mID}_{col}{vol}_{date}.nwb')
+
+            except:
+                #Get date from NWB file
+                fake_nwb_path = glob(os.path.join(DataDir,'nwbs','processed',f'M{mID}_{col}{vol}_*.nwb'))
+                date = fake_nwb_path.split('_')[-1].split('.')[0]
+
+
+            exp_row = experiment_metadata.loc[(experiment_metadata.mID == mID) & (experiment_metadata.col == int(col)) & (experiment_metadata.vol == int(vol))]
+            exp_date = exp_row['exp_date'].values[0]
+            exp_time = exp_row['exp_time'].values[0]
+
+            # #Get session start time
+            session_start_time = datetime(int(exp_date[0:4]),int(exp_date[5:7]),int(exp_date[8:10]),int(exp_time[:2]),int(exp_time[3:5]),int(exp_time[6:]),tzinfo=tz.gettz("US/Pacific"))
+
+            #Get age at session
             age_at_session = (session_start_time - dob_dt).days
 
             # Read in fake NWB file
@@ -167,16 +181,19 @@ if __name__ == '__main__':
 
             # Read in ophys session using V1DD client
             sess = client.load_ophys_session(mouse=mID, column=col, volume=vol)
+            stim_df, stim_meta = sess.get_stimulus_table('drifting_gratings_windowed')
+            center_alt = stim_meta['center_position'][0]
+            center_azi = stim_meta['center_position'][1]
 
-            #Create NWB object
+            # ZARR_fpath = os.path.join(SaveDir,f'M{mID}_{col}{vol}_{date}.nwb.zarr')
             nwbfile = NWBFile(
                 session_description=f"V1 Deep Dive, {mouse_desc}",  
                 identifier=str(uuid4()),  
                 session_start_time=session_start_time,  # required
                 session_id=smeta['session'],  
                 institution="Allen Institute",  
-                experiment_description=f"2-photon imaging of column {col}, volume {vol}",  
-                keywords=["V1", "2p", "visual coding","multi-plane"],
+                experiment_description=f"{process} imaging of column {col}, volume {vol}",  
+                keywords=["V1", process, "visual coding","multi-plane"],
                 file_create_date=datetime.now(tz=tz.gettz("US/Pacific")),
             )
 
@@ -206,7 +223,7 @@ if __name__ == '__main__':
             # Add behavior
             behavior_module = nwbfile.create_processing_module(name="behavior", description="processed behavioral data")
 
-            #Speed
+            # Speed
             speed_xr = sess.get_running_speed()
             running_speed = TimeSeries(
                 name="running_speed",
@@ -216,40 +233,35 @@ if __name__ == '__main__':
                 timestamps=speed_xr['time'].values,
             )
             behavior_module.add(running_speed)
+            eye_df = sess.get_eye_tracking()
+            description_list = ['Time(s)','Corneal reflection area (pixels)','Eye area (pixels)','Pupil area (pixels)','Likely blink',
+                        'Corneal reflection center x (pixels)','Corneal reflection center y (pixels)','Corneal reflection width (pixels)','Corneal reflection height (pixels)','Corneal reflection phi angle (degrees)',
+                        'Eye center x (pixels)','Eye center y (pixels)','Eye width (pixels)','Eye height (pixels)','Eye phi angle (degrees)',
+                        'Pupil center x (pixels)','Pupil center y (pixels)','Pupil width (pixels)','Pupil height (pixels)','Pupil phi angle (degrees)']
 
-            #Pupil
-            pupil_data = np.array(fake_nwb['processing']['eye_tracking_right']['PupilTracking']['eyetracking']['data'])
-            eye_ts = np.array(fake_nwb['processing']['eye_tracking_right']['PupilTracking']['eyetracking']['timestamps'])
-            cornea_ellipse = pupil_data[:,:5]
-            pupil_ellipse = pupil_data[:,10:15]
+            columns_to_copy = ['timestamps', 'cr_area', 'eye_area', 'pupil_area', 'likely_blink',
+                'cr_center_x','cr_center_y', 'cr_width', 'cr_height', 'cr_phi', 
+                'eye_center_x','eye_center_y', 'eye_width', 'eye_height', 'eye_phi', 
+                'pupil_center_x','pupil_center_y', 'pupil_width', 'pupil_height', 'pupil_phi']
+            vec_cols = [VectorData(name=col,description=description_list[i],data=eye_df[columns_to_copy[i]].values) for i, col in enumerate(columns_to_copy)]
 
-            col_ts = VectorData(name='timestamps',description='Timestamps for pupil tracking data',data=eye_ts)
-            col1 = VectorData(name='ellipse_long_axis',description='Pupil ellipse parameters',data=pupil_ellipse[:, 2])
-            col2 = VectorData(name='ellipse_short_axis',description='Pupil ellipse parameters',data=pupil_ellipse[:, 3])
-            col3 = VectorData(name='area',description='Pupil area calculated from the ellipse parameters',data=np.pi * pupil_ellipse[:,2] * pupil_ellipse[:,3])
-
-            # Add pupil area as a table
+            # Add all eye tracking columns to DynamicTable
             behavior_module.add(DynamicTable(
-                name='pupil',
-                description='DLC pupil tracking data',
-                columns=[col_ts, col1, col2, col3]
+                name='eye_tracking',
+                description='DLC tracking corneal reflection (cr), eyelid (eye),and pupil data',
+                columns=vec_cols
             ))
 
-            col1 = VectorData(name='ellipse_long_axis',description='Corneal ellipse parameters',data=cornea_ellipse[:, 2])
-            col2 = VectorData(name='ellipse_short_axis',description='Corneal ellipse parameters',data=cornea_ellipse[:, 3])
-            col3 = VectorData(name='area',description='Corneal area calculated from the ellipse parameters',data=np.pi * cornea_ellipse[:,2] * cornea_ellipse[:,3])
-
-            # Add corneal area as a table
-            behavior_module.add(DynamicTable(
-                name='corneal_reflection',
-                description='DLC corneal tracking data',
-                columns=[col_ts,col1, col2, col3]
-            ))
-
-            device = nwbfile.create_device(
-                name="DEEPSCOPE",
-                description=f"Two-photon microscope used for imaging in V1DD, equipment_id = {microscope_2p_id}",
-                manufacturer="Custom")
+            if process == '2p':
+                device = nwbfile.create_device(
+                    name="DEEPSCOPE",
+                    description=f"Two-photon microscope used for imaging in V1DD, equipment_id = {microscope_2p_id}",
+                    manufacturer="Custom")
+            elif process == '3p':
+                device = nwbfile.create_device(
+                    name="DEEPSCOPE",
+                    description=f"Three-photon microscope used for imaging in V1DD, equipment_id = {microscope_3p_id}",
+                    manufacturer="Custom")
             optical_channel = OpticalChannel(name="TODO",description="TODO",emission_lambda=940.0)
             
             ##------------------------------------------
@@ -302,6 +314,9 @@ if __name__ == '__main__':
             for stim_name in sess.stim_list:
                 stim_table, stim_meta = sess.get_stimulus_table(stim_name)
                 stim_table2 = stim_table.copy()
+                if stim_name in ['drifting_gratings_windowed','drifting_gratings_full']:
+                    stim_table2['center_azimuth'] = stim_meta['center_position'][1]
+                    stim_table2['center_elevation'] = stim_meta['center_position'][0]
                 stim_table2['start_time'] = stim_table2['start']
                 stim_table2['stop_time'] = stim_table2['end']
                 stim_table2['stim_name'] = stim_name
@@ -310,12 +325,12 @@ if __name__ == '__main__':
             df = pd.concat(df_list, ignore_index=True)
             df_sort = df.sort_values(by=['start_time'])
             stimulus_df = df_sort.reset_index(drop=True)
-            stimulus_df['stimulus_condition_id'] = 0
+            stimulus_df['stimulus_condition_id'] = 0 
             stim_cond_dict = stimulus_df.groupby(['stim_name','temporal_frequency','spatial_frequency','direction','frame','image_index'],dropna=False).indices
             for ii, (stim_key, stim_indices) in enumerate(stim_cond_dict.items()):
                 stimulus_df.loc[stim_indices,'stimulus_condition_id'] = ii
 
-            stim_cols = ['stim_name','start_time', 'stop_time', 'temporal_frequency', 'spatial_frequency', 'direction','frame','image_order','image_index','stimulus_condition_id'] 
+            stim_cols = ['stim_name','start_time', 'stop_time', 'temporal_frequency', 'spatial_frequency','center_azimuth','center_elevation','direction','frame','image_order','image_index','stimulus_condition_id'] 
             trial_table = TimeIntervals(
                 name='stimulus_table',
                 description=f"Trial times & parameters all stimulus",
@@ -323,8 +338,8 @@ if __name__ == '__main__':
             )
             for iT, row in stimulus_df.iterrows():
                 trial_table.add_row(stim_name=row['stim_name'],start_time=row['start_time'], stop_time=row['stop_time'],
-                    temporal_frequency=row['temporal_frequency'],spatial_frequency=row['spatial_frequency'],direction=row['direction'],
-                    frame=row['frame'], image_order=row['image_order'], image_index=row['image_index'],stimulus_condition_id=row['stimulus_condition_id'])
+                    temporal_frequency=row['temporal_frequency'],spatial_frequency=row['spatial_frequency'],center_azimuth=row['center_azimuth'],center_elevation=row['center_elevation'],
+                    direction=row['direction'],frame=row['frame'], image_order=row['image_order'], image_index=row['image_index'],stimulus_condition_id=row['stimulus_condition_id'])
             nwbfile.add_time_intervals(trial_table)
             
             ##------------------------------------------
@@ -353,16 +368,6 @@ if __name__ == '__main__':
             )
             nwbfile.add_stimulus(images)
 
-            # idx_series = IndexSeries(
-            #     name="natural_images",
-            #     data=stim_df['image_index'].values,
-            #     indexed_images=images,
-            #     unit="N/A",
-            #     timestamps=stim_df['start'].values,
-            # )
-            # # nwbfile.add_stimulus(idx_series)
-            # nwbfile.add_acquisition(idx_series)
-
             # Locally sparse noise
             stim_df, stim_meta = sess.get_stimulus_table("locally_sparse_noise")
             tif_path = '/allen/programs/mindscope/workgroups/surround/v1dd_in_vivo_new_segmentation/data/stim_movies/stim_locally_sparse_nois_16x28_displayed.tif'
@@ -385,16 +390,6 @@ if __name__ == '__main__':
                 order_of_images=ImageReferences("order_of_images", img_list),
             )
             nwbfile.add_stimulus(images)
-
-            # idx_series = IndexSeries(
-            #     name="locally_sparse_noise",
-            #     data=stim_df['frame'].values,
-            #     indexed_images=images,
-            #     unit="N/A",
-            #     timestamps=stim_df['start'].values,
-            # )
-            # # nwbfile.add_stimulus(idx_series)
-            # nwbfile.add_acquisition(idx_series)
 
             #Natural movie
             stim_df, stim_meta = sess.get_stimulus_table("natural_movie")
@@ -419,19 +414,14 @@ if __name__ == '__main__':
             )
             nwbfile.add_stimulus(images)
 
-            # idx_series = IndexSeries(
-            #     name="natural_movie",
-            #     data=stim_df['frame'].values,
-            #     indexed_images=images,
-            #     unit="N/A",
-            #     timestamps=stim_df['start'].values,
-            # )
-            # # nwbfile.add_stimulus(idx_series)
-            # nwbfile.add_acquisition(idx_series)
-
             ##------------------------------------------
             # Add 2p time series data per plane
-            for plane in range(6):
+            # for plane in sess.get_planes():
+            if process == '2p':
+                num_planes = 6
+            elif process == '3p':
+                num_planes = 1
+            for plane in range(num_planes):
                 # Extract plane data from fake NWB
                 dumb_key = f'rois_and_traces_plane{plane}'
 
@@ -442,7 +432,8 @@ if __name__ == '__main__':
                 pipeline_roi_names = np.array([str(f)[2:-1] for f in np.array(fake_nwb['processing'][dumb_key]['ImageSegmentation']['pipeline_roi_names'])])
                 ref_image_keys = np.array(fake_nwb['processing'][dumb_key]['ImageSegmentation']['imaging_plane']['reference_images'])
                 
-                depth = sess.get_plane_depth(plane+1)
+                depth = sess.get_plane_depth(plane)
+                # pdb.set_trace()
                 # Create imaging plane with appropriate metadata
                 ophys_module = nwbfile.create_processing_module(name=f'plane-{plane}', description="Single-plane ophys processing module")
                 imaging_plane = nwbfile.create_imaging_plane(
@@ -457,9 +448,20 @@ if __name__ == '__main__':
                     grid_spacing=[1.0, 1.0],  # Update if available
                     origin_coords=[0.0, 0.0, 0.0],
                     origin_coords_unit='um')
+                
+                # Add raw images to NWB file
+                # two_p_series = TwoPhotonSeries(
+                #     name="TwoPhotonSeries",
+                #     description="Raw 2p data",
+                #     data=np.ones((1000, 100, 100)),
+                #     imaging_plane=imaging_plane,
+                #     rate=1.0,
+                #     unit="normalized amplitude",
+                # )
+                # nwbfile.add_acquisition(two_p_series)
 
                 # Add ROI masks
-                roi_ids = sess.get_rois(plane+1)
+                roi_ids = sess.get_rois(plane)
                 img_seg = ImageSegmentation(name='image_segmentation')
                 ps = img_seg.create_plane_segmentation(
                     name=f"roi_table",
@@ -477,17 +479,18 @@ if __name__ == '__main__':
                         "pika_roi_id","pika_roi_confidence","is_soma"],
                 )
 
-                pika_roi_ids = sess.get_pika_roi_ids(plane+1)
-                pika_roi_confidence = sess.get_pika_roi_confidence(plane+1)
-                for iR, r in enumerate(sess.get_rois(plane+1)):
-                    ix, iy = sess.get_roi_xy_pixels(plane+1,r)
+                pika_roi_ids = sess.get_pika_roi_ids(plane)
+                pika_roi_confidence = sess.get_pika_roi_confidence(plane)
+                for iR, r in enumerate(sess.get_rois(plane)):
+                    ix, iy = sess.get_roi_xy_pixels(plane,r)
                     iw = np.ones(ix.shape)
                     pixel_mask = np.stack((ix,iy,iw)).T
-                    image_mask = np.zeros((512, 512), dtype=np.uint8)
-                    image_mask[iy,ix] = 1
+                    # image_mask = np.zeros((512, 512), dtype=np.uint8)
+                    # image_mask[iy,ix] = 1
                     is_soma = pika_roi_confidence[iR] > 0.5
-                    ps.add_roi(image_mask=image_mask,id=r,column=col,volume=vol,plane=plane,roi=r,pika_roi_id=pika_roi_ids[iR],
+                    ps.add_roi(pixel_mask=pixel_mask,id=r,column=col,volume=vol,plane=plane,roi=r,pika_roi_id=pika_roi_ids[iR],
                             pika_roi_confidence=pika_roi_confidence[iR],is_soma=is_soma)
+
                 ophys_module.add(img_seg)
                 
                 # Add projections and images
@@ -511,7 +514,7 @@ if __name__ == '__main__':
 
                 # Add fluorescence traces
                 roi_names = ps.create_roi_table_region(region=roi_ids, description="List of measured ROIs")
-                trace_xr = sess.get_traces(plane+1,'raw')
+                trace_xr = sess.get_traces(plane,'raw')
                 raw_traces = RoiResponseSeries(
                     name="raw",
                     data=trace_xr.data.T,
@@ -522,7 +525,7 @@ if __name__ == '__main__':
                 ophys_module.add(raw_traces)
 
                 # add neuropil traces
-                neuropil_xr = sess.get_traces(plane+1,'neuropil')
+                neuropil_xr = sess.get_traces(plane,'neuropil')
                 neuropil_traces = RoiResponseSeries(
                     name="neuropil_fluorescence",
                     data=neuropil_xr.data.T,
@@ -533,7 +536,7 @@ if __name__ == '__main__':
                 ophys_module.add(neuropil_traces)
 
                 # add neuropixl corrected traces
-                neuropil_xr = sess.get_traces(plane+1,'subtracted',valid_only=False)
+                neuropil_xr = sess.get_traces(plane,'subtracted',valid_only=False)
                 neuropil_sub_traces = RoiResponseSeries(
                     name="neuropil_corrected",
                     data=neuropil_xr.data.T,
@@ -544,7 +547,7 @@ if __name__ == '__main__':
                 ophys_module.add(neuropil_sub_traces)
 
                 # add demixed traces
-                demixed_xr = sess.get_traces(plane+1,'demixed',valid_only=False)
+                demixed_xr = sess.get_traces(plane,'demixed',valid_only=False)
                 demixed_traces = RoiResponseSeries(
                     name="demixed",
                     data=demixed_xr.data.T,
@@ -556,7 +559,7 @@ if __name__ == '__main__':
                 # ophys_module.add(Fluorescence(roi_response_series=[raw_traces,neuropil_traces,neuropil_sub_traces,demixed_traces]))
 
                 # add dff traces
-                dff_xr = sess.get_traces(plane+1,'dff',valid_only=False,)
+                dff_xr = sess.get_traces(plane,'dff',valid_only=False,)
                 dfof_traces_series = RoiResponseSeries(
                     name="dff",
                     data=dff_xr.data.T,
@@ -568,7 +571,7 @@ if __name__ == '__main__':
                 # ophys_module.add(DfOverF(roi_response_series=dfof_traces_series))
 
                 # add event traces
-                event_xr = sess.get_traces(plane+1,'events',valid_only=False)
+                event_xr = sess.get_traces(plane,'events',valid_only=False)
                 event_traces_series = RoiResponseSeries(
                     name="events",
                     data=event_xr.data.T,
@@ -578,12 +581,23 @@ if __name__ == '__main__':
                 )
                 ophys_module.add(event_traces_series)
 
+            date_processed = datetime.now(tz=tz.tzlocal()).strftime('%Y-%m-%d_%H-%M-%S')
+            SaveDir_exp = os.path.join(SaveDir, f'{mID}_{col}{vol}_{exp_time}_processed_{date_processed}')
+            if not os.path.exists(SaveDir_exp):
+                os.makedirs(SaveDir_exp)
+            
+            #Copy json files to new directory
+            json_filelist = glob(os.path.join(exp_row['file_path'].values[0],'*json'))
+            for jf in json_filelist:
+                shutil.copy2(jf, os.path.join(SaveDir_exp, os.path.basename(jf)))
+
             # write new NWB object to file
             if nwb_backend == 'hdf5':
-                io = NWBHDF5IO(os.path.join(SaveDir,f'M{mID}_{col}{vol}_{date}.nwb'), mode="w")
+                io = NWBHDF5IO(os.path.join(SaveDir_exp,f'{mID}_{col}{vol}_{exp_date}_{exp_time}.nwb'), mode="w")
                 io.write(nwbfile)
                 io.close()
             elif nwb_backend == 'zarr':
-                io = NWBZarrIO(os.path.join(SaveDir,f'M{mID}_{col}{vol}_{date}.nwb.zarr'), mode="w")
+                io = NWBZarrIO(os.path.join(SaveDir_exp,f'{mID}_{col}{vol}_{exp_date}_{exp_time}.nwb.zarr'), mode="w")
                 io.write(nwbfile)
                 io.close()
+
