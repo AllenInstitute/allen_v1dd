@@ -20,6 +20,7 @@ def get_eye_tracking_df(session):
     'pupil_phi']
 
     try:
+        sys.path.append('/home/david.wyrick/Git/AllenSDK')
         from allensdk.brain_observatory.behavior import eye_tracking_processing
         return eye_tracking_processing.process_eye_tracking_data(
             eye_data = eye_data, 

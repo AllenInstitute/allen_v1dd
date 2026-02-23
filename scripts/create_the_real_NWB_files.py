@@ -1,6 +1,7 @@
 DataDir = "/allen/programs/mindscope/workgroups/surround/v1dd_in_vivo_new_segmentation/data"  # Local on robinson for golden mouse
-SaveDir_local = '/data/v1dd_in_vivo_new_segmentation/nwb_202512_update'
-SaveDir_server = '/allen/programs/mindscope/workgroups/surround/v1dd_in_vivo_new_segmentation/nwb_202512_update'
+SaveDir_local = '/data/v1dd_in_vivo_new_segmentation/nwb_202602_update'
+SaveDir_server = '/allen/programs/mindscope/workgroups/surround/v1dd_in_vivo_new_segmentation/nwb_202602_update'
+
 #Base
 import argparse
 import sys, os
@@ -10,6 +11,7 @@ import pandas as pd
 import json
 import tifffile
 from glob import glob
+import shutil
 
 #V1DD
 from allen_v1dd.client import OPhysClient, OPhysSession
@@ -38,6 +40,7 @@ JuneDir = '/allen/programs/mindscope/workgroups/surround/v1dd_in_vivo_new_segmen
 sys.path.append(JuneDir)
 import utils as jun
 import warnings
+
 # FutureWarning
 warnings.simplefilter(action='ignore', category=FutureWarning)
 ##------------------------------------------
@@ -108,14 +111,13 @@ if __name__ == '__main__':
     client = OPhysClient(DataDir)
 
 
-    experiment_metadata = pd.read_csv('../data_frames/experiment_metadata_202512_update.csv')
-
+    experiment_metadata = pd.read_csv('/home/david.wyrick/Git/allen_v1dd/data_frames/experiment_metadata_202512_update.csv')
     ##------------------------------------------ 
     #Loop over the 4 mice and create NWB files per session
 
     microscope_2p_id = 722885523
     microscope_3p_id = 762899596
-    nwb_backend = 'zarr' #iExp
+    # nwb_backend = 'zarr' #iExp
     for m_key, mID_dict in meta.items():
         if m_key == 'slc1':
             continue
@@ -136,8 +138,8 @@ if __name__ == '__main__':
         # if mID in ['409828','416296','427836']:
         #     continue
 
-        # if mID != '409828':
-        #     continue
+        if mID == '409828':
+            continue
 
         sesses = jun.get_all_sessions(mID)
         if process == '2p':
@@ -161,14 +163,14 @@ if __name__ == '__main__':
 
             except:
                 #Get date from NWB file
-                fake_nwb_path = glob(os.path.join(DataDir,'nwbs','processed',f'M{mID}_{col}{vol}_*.nwb'))
+                fake_nwb_path = glob(os.path.join(DataDir,'nwbs','processed',f'M{mID}_{col}{vol}_*.nwb'))[0]
                 date = fake_nwb_path.split('_')[-1].split('.')[0]
 
-
-            exp_row = experiment_metadata.loc[(experiment_metadata.mID == mID) & (experiment_metadata.col == int(col)) & (experiment_metadata.vol == int(vol))]
+            # import pdb; pdb.set_trace()
+            exp_row = experiment_metadata.loc[(experiment_metadata.mID == int(mID)) & (experiment_metadata.col == int(col)) & (experiment_metadata.vol == int(vol))]
             exp_date = exp_row['exp_date'].values[0]
             exp_time = exp_row['exp_time'].values[0]
-
+                
             # #Get session start time
             session_start_time = datetime(int(exp_date[0:4]),int(exp_date[5:7]),int(exp_date[8:10]),int(exp_time[:2]),int(exp_time[3:5]),int(exp_time[6:]),tzinfo=tz.gettz("US/Pacific"))
 
@@ -416,7 +418,6 @@ if __name__ == '__main__':
 
             ##------------------------------------------
             # Add 2p time series data per plane
-            # for plane in sess.get_planes():
             if process == '2p':
                 num_planes = 6
             elif process == '3p':
@@ -581,15 +582,26 @@ if __name__ == '__main__':
                 )
                 ophys_module.add(event_traces_series)
 
+
+            #Create new save directory with timestamp
             date_processed = datetime.now(tz=tz.tzlocal()).strftime('%Y-%m-%d_%H-%M-%S')
-            SaveDir_exp = os.path.join(SaveDir, f'{mID}_{col}{vol}_{exp_time}_processed_{date_processed}')
+            SaveDir_exp = os.path.join(SaveDir, f'{mID}_{exp_date}_{exp_time}_processsed_{date_processed}')
+            new_name = f'{mID}_{exp_date}_{exp_time}_processed_{date_processed}'
             if not os.path.exists(SaveDir_exp):
                 os.makedirs(SaveDir_exp)
-            
-            #Copy json files to new directory
+
+            #Copy over metadata from previous processing
             json_filelist = glob(os.path.join(exp_row['file_path'].values[0],'*json'))
             for jf in json_filelist:
                 shutil.copy2(jf, os.path.join(SaveDir_exp, os.path.basename(jf)))
+
+            #Edit data description 
+            json_fpath = glob(os.path.join(SaveDir_exp, '*data_description.json'))[0]
+            with open(json_fpath, 'r') as f:
+                data = json.load(f)
+            data['name'] = new_name
+            with open(json_fpath, 'w') as f:
+                json.dump(data, f, indent=2)
 
             # write new NWB object to file
             if nwb_backend == 'hdf5':
@@ -600,4 +612,6 @@ if __name__ == '__main__':
                 io = NWBZarrIO(os.path.join(SaveDir_exp,f'{mID}_{col}{vol}_{exp_date}_{exp_time}.nwb.zarr'), mode="w")
                 io.write(nwbfile)
                 io.close()
+
+
 
